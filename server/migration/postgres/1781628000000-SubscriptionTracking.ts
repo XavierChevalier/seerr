@@ -14,10 +14,10 @@ export class SubscriptionTracking1781628000000 implements MigrationInterface {
       `ALTER TABLE "user" ADD "subscriptionPreference" character varying`
     );
     await queryRunner.query(
-      `CREATE TABLE "subscription_payment" ("id" SERIAL NOT NULL, "date" date NOT NULL, "amount" numeric(10,2) NOT NULL, "method" character varying NOT NULL, "userId" integer, CONSTRAINT "PK_8c3a1e2f4b5d6a7e8f9a0b1c2d3" PRIMARY KEY ("id"))`
+      `CREATE TABLE "subscription_payment" ("id" SERIAL NOT NULL, "date" date NOT NULL, "amount" numeric(10,2) NOT NULL, "method" character varying NOT NULL, "userId" integer, CONSTRAINT "PK_25f8afce4159ee83cf8c6da622d" PRIMARY KEY ("id"))`
     );
     await queryRunner.query(
-      `CREATE TABLE "subscription_gift" ("id" SERIAL NOT NULL, "date" date NOT NULL, "months" integer NOT NULL, "reason" character varying NOT NULL, "userId" integer, CONSTRAINT "PK_9d4b2f3e5c6a7b8d9e0f1a2b3c4" PRIMARY KEY ("id"))`
+      `CREATE TABLE "subscription_gift" ("id" SERIAL NOT NULL, "date" date NOT NULL, "months" integer NOT NULL, "reason" character varying NOT NULL, "userId" integer, CONSTRAINT "PK_13a07409bfaff657d16fe234624" PRIMARY KEY ("id"))`
     );
     await queryRunner.query(
       `ALTER TABLE "subscription_payment" ADD CONSTRAINT "FK_2a17e8d0eea74a5607de6aa549a" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE NO ACTION`
