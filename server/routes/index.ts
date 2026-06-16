@@ -40,6 +40,7 @@ import personRoutes from './person';
 import requestRoutes from './request';
 import searchRoutes from './search';
 import serviceRoutes from './service';
+import subscriptionRoutes from './subscription';
 import tvRoutes from './tv';
 import user from './user';
 
@@ -177,6 +178,7 @@ router.use(
   isAuthenticated(Permission.ADMIN),
   overrideRuleRoutes
 );
+router.use('/subscription', subscriptionRoutes);
 
 router.get('/regions', isAuthenticated(), async (req, res, next) => {
   const tmdb = new TheMovieDb();
