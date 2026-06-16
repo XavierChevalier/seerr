@@ -28,6 +28,8 @@ import {
 import Issue from './Issue';
 import { MediaRequest } from './MediaRequest';
 import SeasonRequest from './SeasonRequest';
+import { SubscriptionGift } from './SubscriptionGift';
+import { SubscriptionPayment } from './SubscriptionPayment';
 import { UserPushSubscription } from './UserPushSubscription';
 import { UserSettings } from './UserSettings';
 
@@ -134,6 +136,15 @@ export class User {
   @Column({ nullable: true })
   public tvQuotaDays?: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  public subscriptionPricePerMonth?: number | null;
+
+  @Column({ type: 'date', nullable: true })
+  public subscriptionStartDate?: Date | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  public subscriptionPreference?: string | null;
+
   @OneToOne(() => UserSettings, (settings) => settings.user, {
     cascade: true,
     eager: true,
@@ -146,6 +157,12 @@ export class User {
 
   @OneToMany(() => Issue, (issue) => issue.createdBy, { cascade: true })
   public createdIssues: Issue[];
+
+  @OneToMany(() => SubscriptionPayment, (payment) => payment.user)
+  public subscriptionPayments: SubscriptionPayment[];
+
+  @OneToMany(() => SubscriptionGift, (gift) => gift.user)
+  public subscriptionGifts: SubscriptionGift[];
 
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;
