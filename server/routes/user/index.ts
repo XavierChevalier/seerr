@@ -493,7 +493,14 @@ router.delete(
   async (req, res, next) => {
     try {
       const paymentRepo = getRepository(SubscriptionPayment);
-      await paymentRepo.delete(Number(req.params.paymentId));
+      const deleteResult = await paymentRepo.delete({
+        id: Number(req.params.paymentId),
+        user: { id: Number(req.params.id) },
+      });
+
+      if (!deleteResult.affected) {
+        return next({ status: 404, message: 'Payment not found' });
+      }
 
       const userRepository = getRepository(User);
       const updatedUser = await userRepository.findOne({
@@ -543,7 +550,14 @@ router.delete(
   async (req, res, next) => {
     try {
       const giftRepo = getRepository(SubscriptionGift);
-      await giftRepo.delete(Number(req.params.giftId));
+      const deleteResult = await giftRepo.delete({
+        id: Number(req.params.giftId),
+        user: { id: Number(req.params.id) },
+      });
+
+      if (!deleteResult.affected) {
+        return next({ status: 404, message: 'Gift not found' });
+      }
 
       const userRepository = getRepository(User);
       const updatedUser = await userRepository.findOne({

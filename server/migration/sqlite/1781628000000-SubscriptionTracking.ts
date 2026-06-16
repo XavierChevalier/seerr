@@ -18,9 +18,17 @@ export class SubscriptionTracking1781628000000 implements MigrationInterface {
     await queryRunner.query(
       `CREATE TABLE "subscription_gift" ("id" integer PRIMARY KEY AUTOINCREMENT NOT NULL, "date" date NOT NULL, "months" integer NOT NULL, "reason" varchar NOT NULL, "userId" integer, CONSTRAINT "FK_a4783a9809ec251659127e3deb9" FOREIGN KEY ("userId") REFERENCES "user" ("id") ON DELETE CASCADE ON UPDATE NO ACTION)`
     );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_2a17e8d0eea74a5607de6aa549" ON "subscription_payment" ("userId")`
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_a4783a9809ec251659127e3deb" ON "subscription_gift" ("userId")`
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP INDEX "IDX_a4783a9809ec251659127e3deb"`);
+    await queryRunner.query(`DROP INDEX "IDX_2a17e8d0eea74a5607de6aa549"`);
     await queryRunner.query(`DROP TABLE "subscription_gift"`);
     await queryRunner.query(`DROP TABLE "subscription_payment"`);
     await queryRunner.query(`ALTER TABLE "user" RENAME TO "temporary_user"`);
