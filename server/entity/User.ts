@@ -136,7 +136,16 @@ export class User {
   @Column({ nullable: true })
   public tvQuotaDays?: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: {
+      to: (v: number | null) => v,
+      from: (v: string) => parseFloat(v),
+    },
+  })
   public subscriptionPricePerMonth?: number | null;
 
   @Column({ type: 'date', nullable: true })
