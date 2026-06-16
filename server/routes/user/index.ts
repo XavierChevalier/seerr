@@ -7,6 +7,8 @@ import { UserType } from '@server/constants/user';
 import dataSource, { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
+import { SubscriptionGift } from '@server/entity/SubscriptionGift';
+import { SubscriptionPayment } from '@server/entity/SubscriptionPayment';
 import { User } from '@server/entity/User';
 import { UserPushSubscription } from '@server/entity/UserPushSubscription';
 import { Watchlist } from '@server/entity/Watchlist';
@@ -23,6 +25,7 @@ import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
+import { calculateSubscriptionState } from '@server/utils/subscriptionHelpers';
 import { isOwnProfileOrAdmin } from '@server/utils/profileMiddleware';
 import { Router } from 'express';
 import gravatarUrl from 'gravatar-url';
@@ -400,6 +403,156 @@ router.delete<{ id: string; endpoint: string }>(
         status: 500,
         message: 'User push subcription not found',
       });
+    }
+  }
+);
+
+router.get(
+  '/:id/subscription',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const userRepository = getRepository(User);
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+
+      if (!user) {
+        return next({ status: 404, message: 'User not found' });
+      }
+
+      return res.status(200).json(calculateSubscriptionState(user));
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.put(
+  '/:id/subscription',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const userRepository = getRepository(User);
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+
+      if (!user) return next({ status: 404, message: 'User not found' });
+
+      user.subscriptionPricePerMonth = req.body.pricePerMonth;
+      user.subscriptionStartDate = req.body.startDate
+        ? new Date(req.body.startDate)
+        : null;
+      user.subscriptionPreference = req.body.preference;
+
+      await userRepository.save(user);
+
+      return res.status(200).json(calculateSubscriptionState(user));
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.post(
+  '/:id/subscription/payment',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const userRepository = getRepository(User);
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+      });
+      if (!user) return next({ status: 404, message: 'User not found' });
+
+      const paymentRepo = getRepository(SubscriptionPayment);
+      const payment = new SubscriptionPayment();
+      payment.date = new Date(req.body.date);
+      payment.amount = req.body.amount;
+      payment.method = req.body.method;
+      payment.user = user;
+      await paymentRepo.save(payment);
+
+      const updatedUser = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+      return res.status(200).json(calculateSubscriptionState(updatedUser!));
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.delete(
+  '/:id/subscription/payment/:paymentId',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const paymentRepo = getRepository(SubscriptionPayment);
+      await paymentRepo.delete(Number(req.params.paymentId));
+
+      const userRepository = getRepository(User);
+      const updatedUser = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+      return res.status(200).json(calculateSubscriptionState(updatedUser!));
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.post(
+  '/:id/subscription/gift',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const userRepository = getRepository(User);
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+      });
+      if (!user) return next({ status: 404, message: 'User not found' });
+
+      const giftRepo = getRepository(SubscriptionGift);
+      const gift = new SubscriptionGift();
+      gift.date = new Date(req.body.date);
+      gift.months = req.body.months;
+      gift.reason = req.body.reason;
+      gift.user = user;
+      await giftRepo.save(gift);
+
+      const updatedUser = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+      return res.status(200).json(calculateSubscriptionState(updatedUser!));
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.delete(
+  '/:id/subscription/gift/:giftId',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const giftRepo = getRepository(SubscriptionGift);
+      await giftRepo.delete(Number(req.params.giftId));
+
+      const userRepository = getRepository(User);
+      const updatedUser = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+      return res.status(200).json(calculateSubscriptionState(updatedUser!));
+    } catch (e) {
+      next({ status: 500, message: e.message });
     }
   }
 );
