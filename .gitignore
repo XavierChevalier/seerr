@@ -2,6 +2,7 @@
 /node_modules
 /.pnp
 .pnp.js
+.pnpm-store/
 
 # testing
 /coverage
@@ -59,6 +60,7 @@ config/db/db.sqlite3-journal
 
 # VS Code
 .vscode/launch.json
+.history/
 
 # Cypress
 cypress.env.json
