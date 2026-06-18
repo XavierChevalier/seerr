@@ -41,6 +41,8 @@ const SettingsAbout = () => {
 
   const { data: status } = useSWR<StatusResponse>('/api/v1/status');
 
+  const githubRepo = status?.githubRepo ?? 'XavierChevalier/seerr';
+
   if (!data && !error) {
     return <LoadingSpinner />;
   }
@@ -80,8 +82,8 @@ const SettingsAbout = () => {
                 <a
                   href={
                     data.version.startsWith('develop-')
-                      ? `https://github.com/seerr-team/seerr/compare/${status.commitTag}...develop`
-                      : 'https://github.com/seerr-team/seerr/releases'
+                      ? `https://github.com/${githubRepo}/compare/${status.commitTag}...develop`
+                      : `https://github.com/${githubRepo}/releases`
                   }
                   target="_blank"
                   rel="noopener noreferrer"
@@ -97,8 +99,8 @@ const SettingsAbout = () => {
                 <a
                   href={
                     data.version.startsWith('develop-')
-                      ? 'https://github.com/seerr-team/seerr/commits/develop'
-                      : 'https://github.com/seerr-team/seerr/releases'
+                      ? `https://github.com/${githubRepo}/commits/develop`
+                      : `https://github.com/${githubRepo}/releases`
                   }
                   target="_blank"
                   rel="noopener noreferrer"

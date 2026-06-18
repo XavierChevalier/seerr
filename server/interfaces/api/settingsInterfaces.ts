@@ -78,4 +78,5 @@ export interface StatusResponse {
   updateAvailable: boolean;
   commitsBehind: number;
   restartRequired: boolean;
+  githubRepo: string;
 }

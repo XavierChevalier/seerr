@@ -25,6 +25,7 @@ import {
   appDataStatus,
 } from '@server/utils/appDataVolume';
 import { getAppVersion, getCommitTag } from '@server/utils/appVersion';
+import { getGithubRepo } from '@server/utils/githubRepo';
 import restartFlag from '@server/utils/restartFlag';
 import { isPerson } from '@server/utils/typeHelpers';
 import { Router } from 'express';
@@ -93,6 +94,7 @@ router.get<unknown, StatusResponse>('/status', async (req, res) => {
     updateAvailable,
     commitsBehind,
     restartRequired: restartFlag.isSet(),
+    githubRepo: getGithubRepo(),
   });
 });
 
