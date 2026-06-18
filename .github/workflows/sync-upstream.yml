@@ -1,0 +1,95 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Sync upstream develop
+
+on:
+  schedule:
+    # Daily at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-upstream-develop
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Merge seerr-team/seerr develop
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Merge upstream develop
+        id: merge
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/seerr-team/seerr.git
+          git fetch upstream develop
+
+          if git merge upstream/develop --no-edit -m "chore(sync): merge upstream develop from seerr-team/seerr"; then
+            echo "status=merged" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Push develop
+        if: steps.merge.outputs.status == 'merged'
+        run: git push origin develop
+
+      - name: Open issue on merge conflict
+        if: failure() && steps.merge.outputs.status == 'conflict'
+        uses: actions/github-script@ed597411d8f32491058ff1c3c8adc866f35de6b2 # v8
+        with:
+          script: |
+            const title = 'Upstream sync conflict on develop';
+            const body = [
+              'Automatic merge of `seerr-team/seerr@develop` into this fork failed due to conflicts.',
+              '',
+              'Resolve locally:',
+              '```bash',
+              'git fetch origin develop',
+              'git checkout develop',
+              'git pull origin develop',
+              'git remote add upstream https://github.com/seerr-team/seerr.git',
+              'git fetch upstream develop',
+              'git merge upstream/develop',
+              '# resolve conflicts, then:',
+              'git push origin develop',
+              '```',
+              '',
+              `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            ].join('\n');
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 20,
+            });
+
+            const existing = issues.find((issue) => issue.title === title);
+            if (existing) {
+              console.log(`Open conflict issue already exists: #${existing.number}`);
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+            });
