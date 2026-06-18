@@ -52,7 +52,7 @@ jobs:
 
       - name: Open issue on merge conflict
         if: failure() && steps.merge.outputs.status == 'conflict'
-        uses: actions/github-script@ed597411d8f32491058ff1c3c8adc866f35de6b2 # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const title = 'Upstream sync conflict on develop';
