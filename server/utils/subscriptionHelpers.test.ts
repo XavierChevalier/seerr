@@ -121,6 +121,21 @@ describe('calculateSubscriptionState', () => {
     assert.strictEqual(state.totalPaid, 30);
   });
 
+  it('returns active status with zero balance for free subscriptions', () => {
+    const user = createUser({
+      subscriptionPricePerMonth: 0,
+      subscriptionStartDate: new Date('2023-06-28'),
+      subscriptionPreference: 'Gratuit',
+    });
+
+    const state = calculateSubscriptionState(user);
+
+    assert.strictEqual(state.totalPaid, 0);
+    assert.strictEqual(state.balance, 0);
+    assert.strictEqual(state.remainingMonths, 0);
+    assert.strictEqual(state.status, 'Actif');
+  });
+
   it('includes pending payments in totalPaid', () => {
     const pending = new SubscriptionPayment();
     pending.id = 1;

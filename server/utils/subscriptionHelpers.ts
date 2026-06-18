@@ -74,9 +74,9 @@ export function calculateSubscriptionState(
   const remainingMonths =
     pricePerMonth > 0
       ? totalPaid / pricePerMonth + totalGiftedMonths - elapsedMonths
-      : totalGiftedMonths - elapsedMonths;
+      : 0;
 
-  const status = remainingMonths >= 0 ? 'Actif' : 'Inactif';
+  const status = balance >= 0 ? 'Actif' : 'Inactif';
 
   return {
     pricePerMonth: user.subscriptionPricePerMonth
