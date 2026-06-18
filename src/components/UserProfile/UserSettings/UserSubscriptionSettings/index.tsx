@@ -1,14 +1,20 @@
+import Alert from '@app/components/Common/Alert';
+import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import useToasts from '@app/hooks/useToasts';
-import { useUser } from '@app/hooks/useUser';
+import { Permission, useUser } from '@app/hooks/useUser';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
-import type { UserSubscriptionResponse } from '@server/interfaces/api/userInterfaces';
+import type {
+  SubscriptionPaymentStatus,
+  UserSubscriptionResponse,
+} from '@server/interfaces/api/userInterfaces';
+import { SUBSCRIPTION_PAYMENT_METHODS } from '@server/utils/subscriptionHelpers';
 import axios from 'axios';
 import { useRouter } from 'next/router';
-import { type FormEvent, useEffect, useState } from 'react';
-import { useIntl } from 'react-intl';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useIntl, type IntlShape } from 'react-intl';
 import useSWR from 'swr';
 
 const messages = defineMessages(
@@ -32,36 +38,256 @@ const messages = defineMessages(
     toastGiftSuccess: 'Gift added successfully!',
     toastGiftFailure: 'Something went wrong while adding gift.',
     toastDeleteFailure: 'Something went wrong while deleting entry.',
-    paymentsHistory: 'Payments History',
+    toastUpdateFailure: 'Something went wrong while updating payment.',
+    toastConfirmFailure: 'Something went wrong while confirming payment.',
+    toastRejectFailure: 'Something went wrong while rejecting payment.',
+    declareTransfer: 'Declare a Transfer',
+    transferHistory: 'Transfer History',
+    transferHistoryDescription:
+      'Declare bank transfers you have made for your subscription here. Each declaration remains pending until validated by an administrator. Confirmed transfers count toward your balance; rejected transfers remain visible but are not counted.',
+    paymentsHistoryDescription:
+      'Payments and transfers declared by this user. Pending entries can be confirmed or rejected.',
+    statusPending: 'Pending',
+    statusConfirmed: 'Confirmed',
+    statusRejected: 'Rejected',
+    confirm: 'Confirm',
+    receivedDate: 'Reception Date',
+    reject: 'Reject',
+    rejectionReason: 'Rejection Reason',
+    edit: 'Edit',
+    save: 'Save',
+    cancel: 'Cancel',
+    notConfigured:
+      'Your subscription is not configured yet. Contact an administrator.',
+    paymentsHistory: 'Payment History',
     amountPlaceholder: 'Amount (€)',
-    methodPlaceholder: 'Method (e.g. PayPal)',
-    addPayment: 'Add Payment',
+    methodPlaceholder: 'Select a method',
+    methodCash: 'Cash',
+    methodPayPal: 'PayPal',
+    methodVirementSepa: 'SEPA Transfer',
+    addPayment: 'Add',
     giftedMonths: 'Gifted Months',
     monthsPlaceholder: 'Months',
     reasonPlaceholder: 'Reason',
     addGift: 'Add Gift',
     delete: 'Delete',
-    preferenceMensuel: 'Mensuel',
-    preferenceSemestriel: 'Semestriel',
-    preferenceAnnuel: 'Annuel',
-    preferenceGratuit: 'Gratuit',
+    giftEntry: '{date} - {months} months ({reason})',
+    preferenceMensuel: 'Monthly',
+    preferenceSemestriel: 'Semi-annual',
+    preferenceAnnuel: 'Annual',
+    preferenceGratuit: 'Free',
+    loadError: 'Unable to load subscription data.',
+    columnDate: 'Date',
+    columnMonths: 'Months',
+    columnReason: 'Reason',
+    paymentDate: 'Payment Date',
+    paymentAmount: 'Payment Amount',
+    columnAmount: 'Amount',
+    columnMethod: 'Method',
+    columnStatus: 'Status',
+    columnActions: 'Actions',
+    statusActive: 'Active',
+    statusInactive: 'Inactive',
+    statusSummaryActive: 'Your subscription is up to date.',
+    statusSummaryInactive:
+      'Your subscription is not up to date. You have {months} months to catch up on.',
+    monthsRemaining: '{months} months covered',
+    monthsBehind: '{months} months behind',
+    totalDue: 'Total Due',
+    totalDueHint: 'Since {date}',
+    totalPaidHint: 'Confirmed and pending transfers',
+    balanceHintCredit: 'You have a credit balance',
+    balanceHintDue: 'Amount remaining to pay',
+    balanceHintEven: 'Account up to date',
+    subscriptionRate: '{amount}/month',
+    subscriptionMemberSince: 'Member since {date}',
   }
 );
+
+interface SummaryStatProps {
+  label: string;
+  value: string;
+  hint?: string;
+  valueClassName?: string;
+}
+
+const SummaryStat = ({
+  label,
+  value,
+  hint,
+  valueClassName = 'text-white',
+}: SummaryStatProps) => (
+  <div className="px-6 py-4">
+    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+      {label}
+    </p>
+    <p className={`mt-1 text-2xl font-bold ${valueClassName}`}>{value}</p>
+    {hint && <p className="mt-1 text-sm text-gray-400">{hint}</p>}
+  </div>
+);
+
+const formatCurrency = (amount: number) =>
+  `€${amount.toLocaleString('fr-FR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+interface CurrencyAmountInputProps {
+  name?: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  className?: string;
+  placeholder?: string;
+}
+
+const CurrencyAmountInput = ({
+  name,
+  value,
+  onChange,
+  required,
+  className,
+  placeholder,
+}: CurrencyAmountInputProps) => {
+  const showSymbol = value.length > 0;
+
+  return (
+    <div className="relative w-full">
+      {showSymbol && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-300"
+        >
+          €
+        </span>
+      )}
+      <input
+        type="number"
+        step="1"
+        name={name}
+        value={value}
+        required={required}
+        placeholder={placeholder}
+        className={`${showSymbol ? 'pl-7' : ''} ${className ?? ''}`}
+        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+          onChange(e.target.value)
+        }
+      />
+    </div>
+  );
+};
+
+const formatSubscriptionDate = (intl: IntlShape, date: string) =>
+  intl.formatDate(date, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+const formatDisplayDate = (date: string) => {
+  const [year, month, day] = date.split('T')[0].split('-');
+
+  if (!year || !month || !day) {
+    return date;
+  }
+
+  return `${day}/${month}/${year}`;
+};
+
+const paymentMethodMessages = {
+  Cash: messages.methodCash,
+  PayPal: messages.methodPayPal,
+  'Virement SEPA': messages.methodVirementSepa,
+} as const;
+
+const formatPaymentMethod = (intl: IntlShape, method: string) => {
+  const message =
+    paymentMethodMessages[method as keyof typeof paymentMethodMessages];
+
+  return message ? intl.formatMessage(message) : method;
+};
+
+interface PaymentMethodSelectProps {
+  value?: string;
+  name?: string;
+  required?: boolean;
+  onChange?: (value: string) => void;
+}
+
+const PaymentMethodSelect = ({
+  value,
+  name,
+  required,
+  onChange,
+}: PaymentMethodSelectProps) => {
+  const intl = useIntl();
+  const options: string[] = [...SUBSCRIPTION_PAYMENT_METHODS];
+
+  if (value && !options.includes(value)) {
+    options.unshift(value);
+  }
+
+  const showPlaceholder = !value;
+
+  return (
+    <select
+      name={name}
+      value={onChange ? value : undefined}
+      defaultValue={onChange ? undefined : ''}
+      required={required}
+      onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+    >
+      {showPlaceholder && (
+        <option value="" disabled hidden>
+          {intl.formatMessage(messages.methodPlaceholder)}
+        </option>
+      )}
+      {options.map((method) => (
+        <option key={method} value={method}>
+          {formatPaymentMethod(intl, method)}
+        </option>
+      ))}
+    </select>
+  );
+};
 
 const UserSubscriptionSettings = () => {
   const intl = useIntl();
   const router = useRouter();
   const { addToast } = useToasts();
-  const { user } = useUser({ id: Number(router.query.userId) });
+  const { user: currentUser, hasPermission } = useUser();
+  const profileUserId = Number(router.query.userId);
+  const targetUserId = Number.isFinite(profileUserId)
+    ? profileUserId
+    : currentUser?.id;
+  const { user } = useUser({ id: targetUserId });
+  const isAdmin = hasPermission(Permission.MANAGE_USERS);
+  const isOwnProfile = currentUser?.id === user?.id;
+
   const { data, error, mutate } = useSWR<UserSubscriptionResponse>(
     user ? `/api/v1/user/${user.id}/subscription` : null
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [editingPaymentId, setEditingPaymentId] = useState<number | null>(null);
+  const [rejectingPaymentId, setRejectingPaymentId] = useState<number | null>(
+    null
+  );
+  const [confirmingPaymentId, setConfirmingPaymentId] = useState<number | null>(
+    null
+  );
+  const [confirmDate, setConfirmDate] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [editForm, setEditForm] = useState({
+    date: '',
+    amount: '',
+    method: '',
+  });
   const [settings, setSettings] = useState({
     pricePerMonth: '',
     startDate: '',
     preference: 'Mensuel',
   });
+  const [paymentFormAmount, setPaymentFormAmount] = useState('');
 
   useEffect(() => {
     if (data) {
@@ -78,15 +304,32 @@ const UserSubscriptionSettings = () => {
     return <LoadingSpinner />;
   }
 
-  if (!data) {
+  if (error) {
+    return (
+      <Alert title={intl.formatMessage(messages.loadError)} type="error" />
+    );
+  }
+
+  if (!data || !user) {
     return <ErrorPage statusCode={500} />;
+  }
+
+  const isConfigured = data.pricePerMonth != null && data.startDate != null;
+
+  if (isOwnProfile && !isAdmin && !isConfigured) {
+    return (
+      <Alert
+        title={intl.formatMessage(messages.notConfigured)}
+        type="warning"
+      />
+    );
   }
 
   const saveSettings = async (e: FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await axios.put(`/api/v1/user/${user?.id}/subscription`, {
+      await axios.put(`/api/v1/user/${user.id}/subscription`, {
         pricePerMonth: settings.pricePerMonth
           ? Number(settings.pricePerMonth)
           : null,
@@ -112,13 +355,14 @@ const UserSubscriptionSettings = () => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     try {
-      await axios.post(`/api/v1/user/${user?.id}/subscription/payment`, {
+      await axios.post(`/api/v1/user/${user.id}/subscription/payment`, {
         date: formData.get('date'),
-        amount: Number(formData.get('amount')),
+        amount: Number(paymentFormAmount),
         method: formData.get('method'),
       });
       mutate();
       (e.target as HTMLFormElement).reset();
+      setPaymentFormAmount('');
       addToast(intl.formatMessage(messages.toastPaymentSuccess), {
         autoDismiss: true,
         appearance: 'success',
@@ -135,7 +379,7 @@ const UserSubscriptionSettings = () => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     try {
-      await axios.post(`/api/v1/user/${user?.id}/subscription/gift`, {
+      await axios.post(`/api/v1/user/${user.id}/subscription/gift`, {
         date: formData.get('date'),
         months: Number(formData.get('months')),
         reason: formData.get('reason'),
@@ -156,9 +400,7 @@ const UserSubscriptionSettings = () => {
 
   const deletePayment = async (id: number) => {
     try {
-      await axios.delete(
-        `/api/v1/user/${user?.id}/subscription/payment/${id}`
-      );
+      await axios.delete(`/api/v1/user/${user.id}/subscription/payment/${id}`);
       mutate();
     } catch {
       addToast(intl.formatMessage(messages.toastDeleteFailure), {
@@ -170,7 +412,7 @@ const UserSubscriptionSettings = () => {
 
   const deleteGift = async (id: number) => {
     try {
-      await axios.delete(`/api/v1/user/${user?.id}/subscription/gift/${id}`);
+      await axios.delete(`/api/v1/user/${user.id}/subscription/gift/${id}`);
       mutate();
     } catch {
       addToast(intl.formatMessage(messages.toastDeleteFailure), {
@@ -180,204 +422,640 @@ const UserSubscriptionSettings = () => {
     }
   };
 
+  const confirmPayment = async (paymentId: number, date: string) => {
+    try {
+      await axios.post(
+        `/api/v1/user/${user.id}/subscription/payment/${paymentId}/confirm`,
+        { date }
+      );
+      mutate();
+      setConfirmingPaymentId(null);
+      setConfirmDate('');
+    } catch {
+      addToast(intl.formatMessage(messages.toastConfirmFailure), {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    }
+  };
+
+  const rejectPayment = async (paymentId: number, reason?: string) => {
+    try {
+      await axios.post(
+        `/api/v1/user/${user.id}/subscription/payment/${paymentId}/reject`,
+        { rejectionReason: reason || undefined }
+      );
+      mutate();
+      setRejectingPaymentId(null);
+      setRejectionReason('');
+    } catch {
+      addToast(intl.formatMessage(messages.toastRejectFailure), {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    }
+  };
+
+  const updatePayment = async (paymentId: number) => {
+    try {
+      await axios.put(
+        `/api/v1/user/${user.id}/subscription/payment/${paymentId}`,
+        {
+          date: editForm.date,
+          amount: Number(editForm.amount),
+          method: editForm.method,
+        }
+      );
+      mutate();
+      setEditingPaymentId(null);
+    } catch {
+      addToast(intl.formatMessage(messages.toastUpdateFailure), {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    }
+  };
+
+  const startEditing = (payment: UserSubscriptionResponse['payments'][0]) => {
+    setEditingPaymentId(payment.id);
+    setEditForm({
+      date: payment.date,
+      amount: String(payment.amount),
+      method: payment.method,
+    });
+  };
+
+  const statusBadge = (status: SubscriptionPaymentStatus) => {
+    if (status === 'pending') {
+      return (
+        <Badge badgeType="warning">
+          {intl.formatMessage(messages.statusPending)}
+        </Badge>
+      );
+    }
+    if (status === 'confirmed') {
+      return (
+        <Badge badgeType="success">
+          {intl.formatMessage(messages.statusConfirmed)}
+        </Badge>
+      );
+    }
+    return (
+      <Badge badgeType="danger">
+        {intl.formatMessage(messages.statusRejected)}
+      </Badge>
+    );
+  };
+
+  const showBaseConfig = isAdmin && !isOwnProfile;
+  const showGiftSection = isAdmin && !isOwnProfile;
+  const showDeclareForm = isOwnProfile || isAdmin;
+  const isStandalonePage = router.pathname === '/subscription';
+  const isActive = data.status === 'Actif';
+  const monthsBehind = Math.max(
+    0,
+    Math.ceil(Math.abs(Math.min(0, data.remainingMonths)))
+  );
+  const balanceClassName =
+    data.balance > 0
+      ? 'text-green-400'
+      : data.balance < 0
+        ? 'text-red-400'
+        : 'text-white';
+  const balanceHint =
+    data.balance > 0
+      ? intl.formatMessage(messages.balanceHintCredit)
+      : data.balance < 0
+        ? intl.formatMessage(messages.balanceHintDue)
+        : intl.formatMessage(messages.balanceHintEven);
+
   return (
-    <div>
-      <div className="mb-6">
-        <h3 className="heading">{intl.formatMessage(messages.title)}</h3>
-        <p className="description">{intl.formatMessage(messages.description)}</p>
+    <div className="text-white">
+      {!isStandalonePage && (
+        <div className="mb-6">
+          <h3 className="heading">{intl.formatMessage(messages.title)}</h3>
+          <p className="description">
+            {intl.formatMessage(messages.description)}
+          </p>
+        </div>
+      )}
+
+      <div className="mb-8 overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow">
+        <div
+          className={`border-b border-gray-700 px-6 py-4 ${
+            isActive ? 'bg-green-500/10' : 'bg-red-500/10'
+          }`}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge badgeType={isActive ? 'success' : 'danger'}>
+                {isActive
+                  ? intl.formatMessage(messages.statusActive)
+                  : intl.formatMessage(messages.statusInactive)}
+              </Badge>
+              <p className="text-sm text-gray-200">
+                {isActive
+                  ? intl.formatMessage(messages.statusSummaryActive)
+                  : intl.formatMessage(messages.statusSummaryInactive, {
+                      months: monthsBehind,
+                    })}
+              </p>
+            </div>
+            {data.pricePerMonth != null && (
+              <div className="text-right text-sm text-gray-400">
+                <p>
+                  {intl.formatMessage(messages.subscriptionRate, {
+                    amount: formatCurrency(data.pricePerMonth),
+                  })}
+                </p>
+                {data.startDate && (
+                  <p className="mt-1">
+                    {intl.formatMessage(messages.subscriptionMemberSince, {
+                      date: formatSubscriptionDate(intl, data.startDate),
+                    })}
+                  </p>
+                )}
+              </div>
+            )}
+            {!data.pricePerMonth && data.startDate && (
+              <p className="text-sm text-gray-400">
+                {intl.formatMessage(messages.subscriptionMemberSince, {
+                  date: formatSubscriptionDate(intl, data.startDate),
+                })}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 divide-y divide-gray-700 sm:grid-cols-2 lg:divide-x lg:divide-y-0">
+          <SummaryStat
+            label={intl.formatMessage(messages.totalPaid)}
+            value={formatCurrency(data.totalPaid)}
+            hint={intl.formatMessage(messages.totalPaidHint)}
+            valueClassName="text-white"
+          />
+          <SummaryStat
+            label={intl.formatMessage(messages.balance)}
+            value={formatCurrency(data.balance)}
+            hint={balanceHint}
+            valueClassName={balanceClassName}
+          />
+        </div>
       </div>
 
-      <div className="mb-8 grid grid-cols-2 gap-4">
-        <div className="rounded-lg bg-gray-800 p-4">
-          <p className="text-gray-400">{intl.formatMessage(messages.status)}</p>
-          <p className="text-2xl font-bold">{data.status}</p>
-        </div>
-        <div className="rounded-lg bg-gray-800 p-4">
-          <p className="text-gray-400">
-            {intl.formatMessage(messages.remainingMonths)}
-          </p>
-          <p className="text-2xl font-bold">{data.remainingMonths}</p>
-        </div>
-        <div className="rounded-lg bg-gray-800 p-4">
-          <p className="text-gray-400">
-            {intl.formatMessage(messages.totalPaid)}
-          </p>
-          <p className="text-2xl font-bold">€{data.totalPaid.toFixed(2)}</p>
-        </div>
-        <div className="rounded-lg bg-gray-800 p-4">
-          <p className="text-gray-400">
-            {intl.formatMessage(messages.balance)}
-          </p>
-          <p className="text-2xl font-bold">€{data.balance.toFixed(2)}</p>
-        </div>
-      </div>
-
-      <form
-        onSubmit={saveSettings}
-        className="mb-8 rounded-lg bg-gray-800 p-4"
-      >
-        <h4 className="mb-4 text-lg font-bold">
-          {intl.formatMessage(messages.baseConfiguration)}
-        </h4>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="text-gray-400">
-              {intl.formatMessage(messages.monthlyPrice)}
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={settings.pricePerMonth}
-              onChange={(e) =>
-                setSettings({ ...settings, pricePerMonth: e.target.value })
-              }
-              className="mt-1 w-full rounded bg-gray-700 p-2 text-white"
-            />
+      {showBaseConfig && (
+        <form
+          onSubmit={saveSettings}
+          className="mb-8 rounded-lg bg-gray-800 p-4"
+        >
+          <h4 className="mb-4 text-lg font-bold text-gray-100">
+            {intl.formatMessage(messages.baseConfiguration)}
+          </h4>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className="text-label">
+                {intl.formatMessage(messages.monthlyPrice)}
+              </label>
+              <div className="form-input-field mt-1">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={settings.pricePerMonth}
+                  onChange={(e) =>
+                    setSettings({ ...settings, pricePerMonth: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-label">
+                {intl.formatMessage(messages.startDate)}
+              </label>
+              <div className="form-input-field mt-1">
+                <input
+                  type="date"
+                  value={settings.startDate}
+                  onChange={(e) =>
+                    setSettings({ ...settings, startDate: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-label">
+                {intl.formatMessage(messages.preference)}
+              </label>
+              <div className="form-input-field mt-1">
+                <select
+                  value={settings.preference}
+                  onChange={(e) =>
+                    setSettings({ ...settings, preference: e.target.value })
+                  }
+                >
+                  <option value="Mensuel">
+                    {intl.formatMessage(messages.preferenceMensuel)}
+                  </option>
+                  <option value="Semestriel">
+                    {intl.formatMessage(messages.preferenceSemestriel)}
+                  </option>
+                  <option value="Annuel">
+                    {intl.formatMessage(messages.preferenceAnnuel)}
+                  </option>
+                  <option value="Gratuit">
+                    {intl.formatMessage(messages.preferenceGratuit)}
+                  </option>
+                </select>
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="text-gray-400">
-              {intl.formatMessage(messages.startDate)}
-            </label>
-            <input
-              type="date"
-              value={settings.startDate}
-              onChange={(e) =>
-                setSettings({ ...settings, startDate: e.target.value })
-              }
-              className="mt-1 w-full rounded bg-gray-700 p-2 text-white"
-            />
-          </div>
-          <div>
-            <label className="text-gray-400">
-              {intl.formatMessage(messages.preference)}
-            </label>
-            <select
-              value={settings.preference}
-              onChange={(e) =>
-                setSettings({ ...settings, preference: e.target.value })
-              }
-              className="mt-1 w-full rounded bg-gray-700 p-2 text-white"
-            >
-              <option value="Mensuel">
-                {intl.formatMessage(messages.preferenceMensuel)}
-              </option>
-              <option value="Semestriel">
-                {intl.formatMessage(messages.preferenceSemestriel)}
-              </option>
-              <option value="Annuel">
-                {intl.formatMessage(messages.preferenceAnnuel)}
-              </option>
-              <option value="Gratuit">
-                {intl.formatMessage(messages.preferenceGratuit)}
-              </option>
-            </select>
-          </div>
-        </div>
-        <Button buttonType="primary" className="mt-4" disabled={isSaving}>
-          {intl.formatMessage(messages.saveSettings)}
-        </Button>
-      </form>
+          <Button buttonType="primary" className="mt-4" disabled={isSaving}>
+            {intl.formatMessage(messages.saveSettings)}
+          </Button>
+        </form>
+      )}
 
       <div className="mb-8">
-        <h4 className="mb-4 text-lg font-bold">
-          {intl.formatMessage(messages.paymentsHistory)}
+        <h4 className="mb-1 text-lg font-bold text-gray-100">
+          {isOwnProfile
+            ? intl.formatMessage(messages.transferHistory)
+            : intl.formatMessage(messages.paymentsHistory)}
         </h4>
-        <form onSubmit={addPayment} className="mb-4 flex gap-4">
-          <input
-            type="date"
-            name="date"
-            required
-            className="w-1/4 rounded bg-gray-700 p-2 text-white"
-          />
-          <input
-            type="number"
-            step="0.01"
-            name="amount"
-            required
-            placeholder={intl.formatMessage(messages.amountPlaceholder)}
-            className="w-1/4 rounded bg-gray-700 p-2 text-white"
-          />
-          <input
-            type="text"
-            name="method"
-            required
-            placeholder={intl.formatMessage(messages.methodPlaceholder)}
-            className="w-1/4 rounded bg-gray-700 p-2 text-white"
-          />
-          <Button buttonType="success" type="submit">
-            {intl.formatMessage(messages.addPayment)}
-          </Button>
-        </form>
-        <ul className="rounded-lg bg-gray-800 p-4">
-          {data.payments.map((p) => (
-            <li
-              key={p.id}
-              className="flex justify-between border-b border-gray-700 py-2"
-            >
-              <span>
-                {p.date} - €{p.amount.toFixed(2)} ({p.method})
-              </span>
-              <button
-                type="button"
-                onClick={() => deletePayment(p.id)}
-                className="text-red-500"
-              >
-                {intl.formatMessage(messages.delete)}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <p className="description mb-4 max-w-none">
+          {isOwnProfile
+            ? intl.formatMessage(messages.transferHistoryDescription)
+            : intl.formatMessage(messages.paymentsHistoryDescription)}
+        </p>
+
+        {showDeclareForm && (
+          <form
+            onSubmit={addPayment}
+            className="mb-4 flex flex-wrap items-end gap-4"
+          >
+            <div className="w-full sm:w-auto sm:min-w-[10rem]">
+              <label className="text-label">
+                {intl.formatMessage(messages.paymentDate)}
+              </label>
+              <div className="form-input-field mt-1">
+                <input type="date" name="date" required />
+              </div>
+            </div>
+            <div className="w-full sm:w-auto sm:min-w-[10rem]">
+              <label className="text-label">
+                {intl.formatMessage(messages.paymentAmount)}
+              </label>
+              <div className="form-input-field mt-1">
+                <CurrencyAmountInput
+                  value={paymentFormAmount}
+                  onChange={setPaymentFormAmount}
+                  required
+                  placeholder={intl.formatMessage(messages.amountPlaceholder)}
+                />
+              </div>
+            </div>
+            <div className="w-full sm:w-auto sm:min-w-[12rem]">
+              <label className="text-label">
+                {intl.formatMessage(messages.columnMethod)}
+              </label>
+              <div className="form-input-field mt-1">
+                <PaymentMethodSelect name="method" required />
+              </div>
+            </div>
+            <Button buttonType="success" type="submit">
+              {isOwnProfile
+                ? intl.formatMessage(messages.declareTransfer)
+                : intl.formatMessage(messages.addPayment)}
+            </Button>
+          </form>
+        )}
+
+        {data.payments.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-gray-400">
+              <thead className="bg-gray-800 text-xs uppercase text-gray-400">
+                <tr>
+                  <th className="px-6 py-3">
+                    {intl.formatMessage(messages.columnDate)}
+                  </th>
+                  <th className="px-6 py-3">
+                    {intl.formatMessage(messages.columnAmount)}
+                  </th>
+                  <th className="px-6 py-3">
+                    {intl.formatMessage(messages.columnMethod)}
+                  </th>
+                  <th className="px-6 py-3">
+                    {intl.formatMessage(messages.columnStatus)}
+                  </th>
+                  <th className="px-6 py-3">
+                    {intl.formatMessage(messages.columnActions)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.payments.map((payment) => (
+                  <tr
+                    key={payment.id}
+                    className="border-b border-gray-700 bg-gray-800"
+                  >
+                    {editingPaymentId === payment.id ? (
+                      <>
+                        <td className="px-6 py-4">
+                          <div className="form-input-field">
+                            <input
+                              type="date"
+                              value={editForm.date}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  date: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="form-input-field">
+                            <CurrencyAmountInput
+                              value={editForm.amount}
+                              onChange={(amount) =>
+                                setEditForm({
+                                  ...editForm,
+                                  amount,
+                                })
+                              }
+                              className="short"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="form-input-field">
+                            <PaymentMethodSelect
+                              value={editForm.method}
+                              onChange={(method) =>
+                                setEditForm({
+                                  ...editForm,
+                                  method,
+                                })
+                              }
+                              required
+                            />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {statusBadge(payment.status)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <Button
+                              buttonType="primary"
+                              onClick={() => updatePayment(payment.id)}
+                            >
+                              {intl.formatMessage(messages.save)}
+                            </Button>
+                            <Button
+                              buttonType="default"
+                              onClick={() => setEditingPaymentId(null)}
+                            >
+                              {intl.formatMessage(messages.cancel)}
+                            </Button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-6 py-4 text-white">
+                          {formatDisplayDate(payment.date)}
+                        </td>
+                        <td className="px-6 py-4 text-gray-100">
+                          €{payment.amount.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-gray-100">
+                          {formatPaymentMethod(intl, payment.method)}
+                        </td>
+                        <td className="px-6 py-4">
+                          {statusBadge(payment.status)}
+                          {payment.rejectionReason && (
+                            <p className="mt-1 text-xs text-red-400">
+                              {payment.rejectionReason}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            {isAdmin && payment.status === 'pending' && (
+                              <>
+                                <Button
+                                  buttonType="success"
+                                  onClick={() => {
+                                    setConfirmingPaymentId(payment.id);
+                                    setConfirmDate(payment.date);
+                                    setRejectingPaymentId(null);
+                                  }}
+                                >
+                                  {intl.formatMessage(messages.confirm)}
+                                </Button>
+                                <Button
+                                  buttonType="danger"
+                                  onClick={() => {
+                                    setRejectingPaymentId(payment.id);
+                                    setConfirmingPaymentId(null);
+                                  }}
+                                >
+                                  {intl.formatMessage(messages.reject)}
+                                </Button>
+                              </>
+                            )}
+                            {isOwnProfile &&
+                              !isAdmin &&
+                              payment.status === 'pending' && (
+                                <>
+                                  <Button
+                                    buttonType="default"
+                                    onClick={() => startEditing(payment)}
+                                  >
+                                    {intl.formatMessage(messages.edit)}
+                                  </Button>
+                                  <Button
+                                    buttonType="danger"
+                                    onClick={() => deletePayment(payment.id)}
+                                  >
+                                    {intl.formatMessage(messages.delete)}
+                                  </Button>
+                                </>
+                              )}
+                            {isAdmin && (
+                              <Button
+                                buttonType="danger"
+                                onClick={() => deletePayment(payment.id)}
+                              >
+                                {intl.formatMessage(messages.delete)}
+                              </Button>
+                            )}
+                          </div>
+                          {confirmingPaymentId === payment.id && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <div className="form-input-field min-w-[12rem]">
+                                <input
+                                  type="date"
+                                  value={confirmDate}
+                                  onChange={(e) =>
+                                    setConfirmDate(e.target.value)
+                                  }
+                                  aria-label={intl.formatMessage(
+                                    messages.receivedDate
+                                  )}
+                                  required
+                                />
+                              </div>
+                              <Button
+                                buttonType="success"
+                                onClick={() =>
+                                  confirmPayment(payment.id, confirmDate)
+                                }
+                              >
+                                {intl.formatMessage(messages.confirm)}
+                              </Button>
+                              <Button
+                                buttonType="default"
+                                onClick={() => {
+                                  setConfirmingPaymentId(null);
+                                  setConfirmDate('');
+                                }}
+                              >
+                                {intl.formatMessage(messages.cancel)}
+                              </Button>
+                            </div>
+                          )}
+                          {rejectingPaymentId === payment.id && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <div className="form-input-field min-w-[12rem]">
+                                <input
+                                  type="text"
+                                  value={rejectionReason}
+                                  onChange={(e) =>
+                                    setRejectionReason(e.target.value)
+                                  }
+                                  placeholder={intl.formatMessage(
+                                    messages.rejectionReason
+                                  )}
+                                />
+                              </div>
+                              <Button
+                                buttonType="danger"
+                                onClick={() =>
+                                  rejectPayment(payment.id, rejectionReason)
+                                }
+                              >
+                                {intl.formatMessage(messages.reject)}
+                              </Button>
+                              <Button
+                                buttonType="default"
+                                onClick={() => {
+                                  setRejectingPaymentId(null);
+                                  setRejectionReason('');
+                                }}
+                              >
+                                {intl.formatMessage(messages.cancel)}
+                              </Button>
+                            </div>
+                          )}
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      <div>
-        <h4 className="mb-4 text-lg font-bold">
-          {intl.formatMessage(messages.giftedMonths)}
-        </h4>
-        <form onSubmit={addGift} className="mb-4 flex gap-4">
-          <input
-            type="date"
-            name="date"
-            required
-            className="w-1/4 rounded bg-gray-700 p-2 text-white"
-          />
-          <input
-            type="number"
-            name="months"
-            required
-            placeholder={intl.formatMessage(messages.monthsPlaceholder)}
-            className="w-1/4 rounded bg-gray-700 p-2 text-white"
-          />
-          <input
-            type="text"
-            name="reason"
-            required
-            placeholder={intl.formatMessage(messages.reasonPlaceholder)}
-            className="w-1/4 rounded bg-gray-700 p-2 text-white"
-          />
-          <Button buttonType="success" type="submit">
-            {intl.formatMessage(messages.addGift)}
-          </Button>
-        </form>
-        <ul className="rounded-lg bg-gray-800 p-4">
-          {data.gifts.map((g) => (
-            <li
-              key={g.id}
-              className="flex justify-between border-b border-gray-700 py-2"
-            >
-              <span>
-                {g.date} - {g.months} months ({g.reason})
-              </span>
-              <button
-                type="button"
-                onClick={() => deleteGift(g.id)}
-                className="text-red-500"
-              >
-                {intl.formatMessage(messages.delete)}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {showGiftSection && (
+        <div>
+          <h4 className="mb-4 text-lg font-bold text-gray-100">
+            {intl.formatMessage(messages.giftedMonths)}
+          </h4>
+          <form
+            onSubmit={addGift}
+            className="mb-4 flex flex-wrap items-end gap-4"
+          >
+            <div className="form-input-field w-full sm:w-auto sm:min-w-[10rem]">
+              <input type="date" name="date" required />
+            </div>
+            <div className="form-input-field w-full sm:w-auto sm:min-w-[6rem]">
+              <input
+                type="number"
+                name="months"
+                required
+                placeholder={intl.formatMessage(messages.monthsPlaceholder)}
+                className="short"
+              />
+            </div>
+            <div className="form-input-field w-full sm:w-auto sm:min-w-[12rem]">
+              <input
+                type="text"
+                name="reason"
+                required
+                placeholder={intl.formatMessage(messages.reasonPlaceholder)}
+              />
+            </div>
+            <Button buttonType="success" type="submit">
+              {intl.formatMessage(messages.addGift)}
+            </Button>
+          </form>
+          {data.gifts.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-gray-400">
+                <thead className="bg-gray-800 text-xs uppercase text-gray-400">
+                  <tr>
+                    <th className="px-6 py-3">
+                      {intl.formatMessage(messages.columnDate)}
+                    </th>
+                    <th className="px-6 py-3">
+                      {intl.formatMessage(messages.columnMonths)}
+                    </th>
+                    <th className="px-6 py-3">
+                      {intl.formatMessage(messages.columnAmount)}
+                    </th>
+                    <th className="px-6 py-3">
+                      {intl.formatMessage(messages.columnReason)}
+                    </th>
+                    <th className="px-6 py-3">
+                      {intl.formatMessage(messages.columnActions)}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.gifts.map((g) => (
+                    <tr
+                      key={g.id}
+                      className="border-b border-gray-700 bg-gray-800"
+                    >
+                      <td className="px-6 py-4 text-white">
+                        {formatDisplayDate(g.date)}
+                      </td>
+                      <td className="px-6 py-4 text-gray-100">{g.months}</td>
+                      <td className="px-6 py-4 text-gray-100">
+                        {data.pricePerMonth != null
+                          ? formatCurrency(g.months * data.pricePerMonth)
+                          : '—'}
+                      </td>
+                      <td className="px-6 py-4 text-gray-100">{g.reason}</td>
+                      <td className="px-6 py-4">
+                        <Button
+                          buttonType="danger"
+                          onClick={() => deleteGift(g.id)}
+                        >
+                          {intl.formatMessage(messages.delete)}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -11,6 +11,7 @@ import PlexWatchlistSlider from '@app/components/Discover/PlexWatchlistSlider';
 import RecentRequestsSlider from '@app/components/Discover/RecentRequestsSlider';
 import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
 import StudioSlider from '@app/components/Discover/StudioSlider';
+import SubscriptionAlertBanner from '@app/components/Discover/SubscriptionAlertBanner';
 import TvGenreSlider from '@app/components/Discover/TvGenreSlider';
 import { sliderTitles } from '@app/components/Discover/constants';
 import MediaSlider from '@app/components/MediaSlider';
@@ -206,6 +207,7 @@ const Discover = () => {
           </Transition>
         </>
       )}
+      {!isEditing && <SubscriptionAlertBanner />}
       {(isEditing ? sliders : discoverData)?.map((slider, index) => {
         let sliderComponent: React.ReactNode;
 

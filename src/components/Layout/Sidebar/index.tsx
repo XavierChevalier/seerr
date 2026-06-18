@@ -7,6 +7,7 @@ import { Transition } from '@headlessui/react';
 import {
   ClockIcon,
   CogIcon,
+  CreditCardIcon,
   ExclamationTriangleIcon,
   EyeSlashIcon,
   FilmIcon,
@@ -15,11 +16,13 @@ import {
   UsersIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import type { SubscriptionStatusResponse } from '@server/interfaces/api/userInterfaces';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Fragment, useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
+import useSWR from 'swr';
 
 export const menuMessages = defineMessages('components.Layout.Sidebar', {
   dashboard: 'Discover',
@@ -30,6 +33,8 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   issues: 'Issues',
   users: 'Users',
   settings: 'Settings',
+  subscription: 'Subscription',
+  subscriptions: 'Subscriptions',
 });
 
 interface SidebarProps {
@@ -76,6 +81,13 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'requests',
     svgIcon: <ClockIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/requests/,
+  },
+  {
+    href: '/subscription',
+    messagesKey: 'subscription',
+    svgIcon: <CreditCardIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/subscription/,
+    dataTestId: 'sidebar-menu-subscription',
   },
   {
     href: '/blocklist',
@@ -130,7 +142,22 @@ const Sidebar = ({
   const router = useRouter();
   const intl = useIntl();
   const { hasPermission } = useUser();
+  const { data: subscriptionStatus } = useSWR<SubscriptionStatusResponse>(
+    '/api/v1/subscription/status'
+  );
   useClickOutside(navRef, () => setClosed());
+
+  const isLinkVisible = (link: SidebarLinkProps) => {
+    if (link.messagesKey === 'subscription') {
+      return subscriptionStatus?.isConfigured === true;
+    }
+    if (link.requiredPermission) {
+      return hasPermission(link.requiredPermission, {
+        type: link.permissionType ?? 'and',
+      });
+    }
+    return true;
+  };
 
   useEffect(() => {
     if (openIssuesCount) {
@@ -197,13 +224,7 @@ const Sidebar = ({
                       </span>
                     </div>
                     <nav className="mt-10 flex-1 space-y-4 px-4">
-                      {SidebarLinks.filter((link) =>
-                        link.requiredPermission
-                          ? hasPermission(link.requiredPermission, {
-                              type: link.permissionType ?? 'and',
-                            })
-                          : true
-                      ).map((sidebarLink) => {
+                      {SidebarLinks.filter(isLinkVisible).map((sidebarLink) => {
                         return (
                           <Link
                             key={`mobile-${sidebarLink.messagesKey}`}
@@ -265,13 +286,7 @@ const Sidebar = ({
                 </span>
               </div>
               <nav className="mt-8 flex-1 space-y-4 px-4">
-                {SidebarLinks.filter((link) =>
-                  link.requiredPermission
-                    ? hasPermission(link.requiredPermission, {
-                        type: link.permissionType ?? 'and',
-                      })
-                    : true
-                ).map((sidebarLink) => {
+                {SidebarLinks.filter(isLinkVisible).map((sidebarLink) => {
                   return (
                     <Link
                       key={`desktop-${sidebarLink.messagesKey}`}

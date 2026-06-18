@@ -30,6 +30,12 @@ const Layout = ({ children }: LayoutProps) => {
       revalidateOnMount: true,
     }
   );
+  const {
+    data: subscriptionCountResponse,
+    mutate: revalidateSubscriptionsCount,
+  } = useSWR('/api/v1/subscription/count', {
+    revalidateOnMount: true,
+  });
   const { data: issueResponse, mutate: revalidateIssueCount } = useSWR(
     '/api/v1/issue/count',
     {
@@ -73,16 +79,20 @@ const Layout = ({ children }: LayoutProps) => {
         open={isSidebarOpen}
         setClosed={() => setSidebarOpen(false)}
         pendingRequestsCount={requestResponse?.pending ?? 0}
+        pendingSubscriptionsCount={subscriptionCountResponse?.pending ?? 0}
         openIssuesCount={issueResponse?.open ?? 0}
         revalidateIssueCount={() => revalidateIssueCount()}
         revalidateRequestsCount={() => revalidateRequestsCount()}
+        revalidateSubscriptionsCount={() => revalidateSubscriptionsCount()}
       />
       <div className="sm:hidden">
         <MobileMenu
           pendingRequestsCount={requestResponse?.pending ?? 0}
+          pendingSubscriptionsCount={subscriptionCountResponse?.pending ?? 0}
           openIssuesCount={issueResponse?.open ?? 0}
           revalidateIssueCount={() => revalidateIssueCount()}
           revalidateRequestsCount={() => revalidateRequestsCount()}
+          revalidateSubscriptionsCount={() => revalidateSubscriptionsCount()}
         />
       </div>
 

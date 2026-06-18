@@ -143,7 +143,13 @@ export class User {
     nullable: true,
     transformer: {
       to: (v: number | null) => v,
-      from: (v: string) => parseFloat(v),
+      from: (v: string | null): number | null => {
+        if (v == null || v === '') {
+          return null;
+        }
+        const parsed = parseFloat(v);
+        return Number.isNaN(parsed) ? null : parsed;
+      },
     },
   })
   public subscriptionPricePerMonth?: number | null;

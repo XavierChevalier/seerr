@@ -316,9 +316,27 @@
 
   input[type='text'],
   input[type='password'],
+  input[type='date'],
+  input[type='number'],
+  input[type='email'],
   select,
   textarea {
     @apply block w-full min-w-0 flex-1 rounded-md border border-gray-500 bg-gray-700 text-white transition duration-150 ease-in-out sm:text-sm sm:leading-5;
+  }
+
+  input[type='date'] {
+    color-scheme: dark;
+  }
+
+  input[type='date']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    width: 1.125rem;
+    height: 1.125rem;
+    opacity: 0.85;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23d1d5db' stroke-width='1.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 1.125rem 1.125rem;
   }
 
   input.rounded-l-only,

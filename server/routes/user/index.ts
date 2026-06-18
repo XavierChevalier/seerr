@@ -25,8 +25,13 @@ import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
-import { calculateSubscriptionState } from '@server/utils/subscriptionHelpers';
 import { isOwnProfileOrAdmin } from '@server/utils/profileMiddleware';
+import {
+  calculateSubscriptionState,
+  isSubscriptionConfigured,
+  isValidSubscriptionPaymentMethod,
+} from '@server/utils/subscriptionHelpers';
+import type { Request, Response } from 'express';
 import { Router } from 'express';
 import gravatarUrl from 'gravatar-url';
 import { findIndex, sortBy } from 'lodash';
@@ -35,6 +40,22 @@ import { In, Not } from 'typeorm';
 import userSettingsRoutes from './usersettings';
 
 const router = Router();
+
+function isAdmin(req: Request): boolean {
+  return !!req.user?.hasPermission(Permission.MANAGE_USERS);
+}
+
+async function loadSubscriptionUser(userId: number) {
+  return getRepository(User).findOne({
+    where: { id: userId },
+    relations: ['subscriptionPayments', 'subscriptionGifts'],
+  });
+}
+
+async function respondWithSubscriptionState(userId: number, res: Response) {
+  const user = await loadSubscriptionUser(userId);
+  return res.status(200).json(calculateSubscriptionState(user!));
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -409,14 +430,10 @@ router.delete<{ id: string; endpoint: string }>(
 
 router.get(
   '/:id/subscription',
-  isAuthenticated(Permission.MANAGE_USERS),
+  isOwnProfileOrAdmin(),
   async (req, res, next) => {
     try {
-      const userRepository = getRepository(User);
-      const user = await userRepository.findOne({
-        where: { id: Number(req.params.id) },
-        relations: ['subscriptionPayments', 'subscriptionGifts'],
-      });
+      const user = await loadSubscriptionUser(Number(req.params.id));
 
       if (!user) {
         return next({ status: 404, message: 'User not found' });
@@ -459,28 +476,82 @@ router.put(
 
 router.post(
   '/:id/subscription/payment',
-  isAuthenticated(Permission.MANAGE_USERS),
+  isOwnProfileOrAdmin(),
   async (req, res, next) => {
     try {
-      const userRepository = getRepository(User);
-      const user = await userRepository.findOne({
-        where: { id: Number(req.params.id) },
+      const userId = Number(req.params.id);
+      const user = await getRepository(User).findOne({
+        where: { id: userId },
       });
       if (!user) return next({ status: 404, message: 'User not found' });
+
+      if (!isAdmin(req) && !isSubscriptionConfigured(user)) {
+        return next({
+          status: 403,
+          message: 'Subscription is not configured for this user.',
+        });
+      }
+
+      if (!isValidSubscriptionPaymentMethod(req.body.method)) {
+        return next({
+          status: 400,
+          message: 'Invalid payment method.',
+        });
+      }
 
       const paymentRepo = getRepository(SubscriptionPayment);
       const payment = new SubscriptionPayment();
       payment.date = new Date(req.body.date);
       payment.amount = req.body.amount;
       payment.method = req.body.method;
+      payment.status = isAdmin(req) ? 'confirmed' : 'pending';
+      payment.createdByUserId = req.user!.id;
       payment.user = user;
       await paymentRepo.save(payment);
 
-      const updatedUser = await userRepository.findOne({
-        where: { id: Number(req.params.id) },
-        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      return respondWithSubscriptionState(userId, res);
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.put(
+  '/:id/subscription/payment/:paymentId',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    try {
+      const userId = Number(req.params.id);
+      const paymentId = Number(req.params.paymentId);
+      const paymentRepo = getRepository(SubscriptionPayment);
+      const payment = await paymentRepo.findOne({
+        where: { id: paymentId, user: { id: userId } },
       });
-      return res.status(200).json(calculateSubscriptionState(updatedUser!));
+
+      if (!payment) {
+        return next({ status: 404, message: 'Payment not found' });
+      }
+
+      if (!isValidSubscriptionPaymentMethod(req.body.method)) {
+        return next({
+          status: 400,
+          message: 'Invalid payment method.',
+        });
+      }
+
+      if (!isAdmin(req) && payment.status !== 'pending') {
+        return next({
+          status: 403,
+          message: 'You can only edit pending payments.',
+        });
+      }
+
+      payment.date = new Date(req.body.date);
+      payment.amount = req.body.amount;
+      payment.method = req.body.method;
+      await paymentRepo.save(payment);
+
+      return respondWithSubscriptionState(userId, res);
     } catch (e) {
       next({ status: 500, message: e.message });
     }
@@ -489,25 +560,88 @@ router.post(
 
 router.delete(
   '/:id/subscription/payment/:paymentId',
-  isAuthenticated(Permission.MANAGE_USERS),
+  isOwnProfileOrAdmin(),
   async (req, res, next) => {
     try {
+      const userId = Number(req.params.id);
+      const paymentId = Number(req.params.paymentId);
       const paymentRepo = getRepository(SubscriptionPayment);
-      const deleteResult = await paymentRepo.delete({
-        id: Number(req.params.paymentId),
-        user: { id: Number(req.params.id) },
+      const payment = await paymentRepo.findOne({
+        where: { id: paymentId, user: { id: userId } },
       });
 
-      if (!deleteResult.affected) {
+      if (!payment) {
         return next({ status: 404, message: 'Payment not found' });
       }
 
-      const userRepository = getRepository(User);
-      const updatedUser = await userRepository.findOne({
-        where: { id: Number(req.params.id) },
-        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      if (!isAdmin(req) && payment.status !== 'pending') {
+        return next({
+          status: 403,
+          message: 'You can only delete pending payments.',
+        });
+      }
+
+      await paymentRepo.remove(payment);
+
+      return respondWithSubscriptionState(userId, res);
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.post(
+  '/:id/subscription/payment/:paymentId/confirm',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const userId = Number(req.params.id);
+      const paymentId = Number(req.params.paymentId);
+      const paymentRepo = getRepository(SubscriptionPayment);
+      const payment = await paymentRepo.findOne({
+        where: { id: paymentId, user: { id: userId } },
       });
-      return res.status(200).json(calculateSubscriptionState(updatedUser!));
+
+      if (!payment) {
+        return next({ status: 404, message: 'Payment not found' });
+      }
+
+      const receivedDate = req.body?.date
+        ? new Date(req.body.date)
+        : payment.date;
+      payment.date = receivedDate;
+      payment.status = 'confirmed';
+      payment.rejectionReason = null;
+      await paymentRepo.save(payment);
+
+      return respondWithSubscriptionState(userId, res);
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.post(
+  '/:id/subscription/payment/:paymentId/reject',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const userId = Number(req.params.id);
+      const paymentId = Number(req.params.paymentId);
+      const paymentRepo = getRepository(SubscriptionPayment);
+      const payment = await paymentRepo.findOne({
+        where: { id: paymentId, user: { id: userId } },
+      });
+
+      if (!payment) {
+        return next({ status: 404, message: 'Payment not found' });
+      }
+
+      payment.status = 'rejected';
+      payment.rejectionReason = req.body.rejectionReason ?? null;
+      await paymentRepo.save(payment);
+
+      return respondWithSubscriptionState(userId, res);
     } catch (e) {
       next({ status: 500, message: e.message });
     }

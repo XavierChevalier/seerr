@@ -1987,6 +1987,123 @@ components:
         telegramSendSilently:
           type: boolean
           nullable: true
+    SubscriptionPaymentStatus:
+      type: string
+      enum: [pending, confirmed, rejected]
+    SubscriptionPayment:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        amount:
+          type: number
+        method:
+          type: string
+          enum:
+            - Cash
+            - PayPal
+            - Virement SEPA
+        status:
+          $ref: '#/components/schemas/SubscriptionPaymentStatus'
+        rejectionReason:
+          type: string
+          nullable: true
+        createdByUserId:
+          type: integer
+    SubscriptionGift:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        months:
+          type: integer
+        reason:
+          type: string
+    UserSubscription:
+      type: object
+      properties:
+        pricePerMonth:
+          type: number
+          nullable: true
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        preference:
+          type: string
+          nullable: true
+        totalPaid:
+          type: number
+        totalDue:
+          type: number
+        balance:
+          type: number
+        elapsedMonths:
+          type: number
+        totalGiftedMonths:
+          type: number
+        remainingMonths:
+          type: number
+        status:
+          type: string
+          enum: [Actif, Inactif]
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionPayment'
+        gifts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionGift'
+    SubscriptionOverviewItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        displayName:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+        subscription:
+          $ref: '#/components/schemas/UserSubscription'
+        pendingCount:
+          type: integer
+        pendingAmount:
+          type: number
+        pendingPayments:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              amount:
+                type: number
+              date:
+                type: string
+                format: date
+    SubscriptionStatusResponse:
+      type: object
+      properties:
+        isConfigured:
+          type: boolean
+        status:
+          type: string
+          enum: [Actif, Inactif]
+          nullable: true
+        remainingMonths:
+          type: number
+          nullable: true
+        hasPendingPayments:
+          type: boolean
     NotificationAgentTypes:
       type: object
       properties:
@@ -4878,6 +4995,53 @@ paths:
           description: Successfully removed collection from blocklist
         '500':
           description: Error removing collection from blocklist
+  /subscription:
+    get:
+      summary: Get subscriptions overview
+      description: Returns subscription overview for all users. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      responses:
+        '200':
+          description: Subscriptions overview returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubscriptionOverviewItem'
+  /subscription/count:
+    get:
+      summary: Get pending subscription payment count
+      description: Returns the number of pending subscription payments across all users. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      responses:
+        '200':
+          description: Pending subscription payment count returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pending:
+                    type: number
+  /subscription/status:
+    get:
+      summary: Get current user subscription status
+      description: Returns subscription configuration and status for the authenticated user.
+      tags:
+        - users
+      responses:
+        '200':
+          description: Subscription status returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionStatusResponse'
   /watchlist:
     post:
       summary: Add media to watchlist
@@ -5260,6 +5424,298 @@ paths:
                   permissions:
                     type: number
                     example: 2
+  /user/{userId}/subscription:
+    get:
+      summary: Get user subscription details
+      description: Returns subscription summary, payments, and gifts for a user. Users can read their own subscription; admins can read any user.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: User subscription details returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+    put:
+      summary: Update user subscription settings
+      description: Updates base subscription settings for a user. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pricePerMonth:
+                  type: number
+                  nullable: true
+                startDate:
+                  type: string
+                  format: date
+                  nullable: true
+                preference:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+  /user/{userId}/subscription/payment:
+    post:
+      summary: Add subscription payment
+      description: Adds a payment record for a user. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                amount:
+                  type: number
+                method:
+                  type: string
+                  enum:
+                    - Cash
+                    - PayPal
+                    - Virement SEPA
+              required:
+                - date
+                - amount
+                - method
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+  /user/{userId}/subscription/payment/{paymentId}:
+    put:
+      summary: Update subscription payment
+      description: Updates a payment record. Users can edit their own pending payments; admins can edit any pending payment.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: paymentId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                amount:
+                  type: number
+                method:
+                  type: string
+                  enum:
+                    - Cash
+                    - PayPal
+                    - Virement SEPA
+              required:
+                - date
+                - amount
+                - method
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+    delete:
+      summary: Delete subscription payment
+      description: Removes a payment record for a user. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: paymentId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+  /user/{userId}/subscription/payment/{paymentId}/confirm:
+    post:
+      summary: Confirm a pending subscription payment
+      description: Confirms a pending payment. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: paymentId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  description: Date the payment was received. Defaults to the date declared by the user.
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+  /user/{userId}/subscription/payment/{paymentId}/reject:
+    post:
+      summary: Reject a pending subscription payment
+      description: Rejects a pending payment with an optional reason. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: paymentId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rejectionReason:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+  /user/{userId}/subscription/gift:
+    post:
+      summary: Add gifted subscription months
+      description: Adds gifted months for a user. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                months:
+                  type: integer
+                reason:
+                  type: string
+              required:
+                - date
+                - months
+                - reason
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+  /user/{userId}/subscription/gift/{giftId}:
+    delete:
+      summary: Delete gifted subscription months
+      description: Removes a gift record for a user. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: giftId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
   /user/{userId}/watch_data:
     get:
       summary: Get watch data

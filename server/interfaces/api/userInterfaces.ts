@@ -29,11 +29,16 @@ export interface UserWatchDataResponse {
   playCount: number;
 }
 
+export type SubscriptionPaymentStatus = 'pending' | 'confirmed' | 'rejected';
+
 export interface SubscriptionPaymentResponse {
   id: number;
   date: string;
   amount: number;
   method: string;
+  status: SubscriptionPaymentStatus;
+  rejectionReason: string | null;
+  createdByUserId: number;
 }
 
 export interface SubscriptionGiftResponse {
@@ -64,8 +69,22 @@ export interface SubscriptionOverviewItem {
   email: string;
   avatar: string;
   subscription: UserSubscriptionResponse;
+  pendingCount: number;
+  pendingAmount: number;
+  pendingPayments: { id: number; amount: number; date: string }[];
+}
+
+export interface SubscriptionStatusResponse {
+  isConfigured: boolean;
+  status: 'Actif' | 'Inactif' | null;
+  remainingMonths: number | null;
+  hasPendingPayments: boolean;
 }
 
 export interface SubscriptionOverviewResponse {
   results: SubscriptionOverviewItem[];
+}
+
+export interface SubscriptionCountResponse {
+  pending: number;
 }

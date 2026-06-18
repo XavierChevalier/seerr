@@ -9,6 +9,7 @@ import { useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
+import type { SubscriptionStatusResponse } from '@server/interfaces/api/userInterfaces';
 import type { UserSettingsNotificationsResponse } from '@server/interfaces/api/userSettingsInterfaces';
 import { hasPermission, Permission } from '@server/lib/permissions';
 import { useRouter } from 'next/router';
@@ -21,7 +22,7 @@ const messages = defineMessages('components.UserProfile.UserSettings', {
   menuLinkedAccounts: 'Linked Accounts',
   menuNotifications: 'Notifications',
   menuPermissions: 'Permissions',
-  menuSubscription: 'Abonnement',
+  menuSubscription: 'Subscription',
   unauthorizedDescription:
     "You do not have permission to modify this user's settings.",
 });
@@ -38,6 +39,9 @@ const UserSettings = ({ children }: UserSettingsProps) => {
   const intl = useIntl();
   const { data } = useSWR<UserSettingsNotificationsResponse>(
     user ? `/api/v1/user/${user?.id}/settings/notifications` : null
+  );
+  const { data: subscriptionStatus } = useSWR<SubscriptionStatusResponse>(
+    currentUser?.id === user?.id ? '/api/v1/subscription/status' : null
   );
 
   if (!user && !error) {
@@ -92,7 +96,18 @@ const UserSettings = ({ children }: UserSettingsProps) => {
       text: intl.formatMessage(messages.menuSubscription),
       route: '/settings/subscription',
       regex: /\/settings\/subscription/,
-      requiredPermission: Permission.MANAGE_USERS,
+      hidden:
+        (currentUser?.id !== user.id &&
+          !hasPermission(
+            Permission.MANAGE_USERS,
+            currentUser?.permissions ?? 0
+          )) ||
+        (currentUser?.id === user.id &&
+          !hasPermission(
+            Permission.MANAGE_USERS,
+            currentUser?.permissions ?? 0
+          ) &&
+          subscriptionStatus?.isConfigured === false),
     },
   ];
 
