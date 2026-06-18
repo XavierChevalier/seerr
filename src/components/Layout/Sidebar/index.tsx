@@ -41,9 +41,11 @@ interface SidebarProps {
   open?: boolean;
   setClosed: () => void;
   pendingRequestsCount: number;
+  pendingSubscriptionsCount: number;
   openIssuesCount: number;
   revalidateIssueCount: () => void;
   revalidateRequestsCount: () => void;
+  revalidateSubscriptionsCount: () => void;
 }
 
 interface SidebarLinkProps {
@@ -134,9 +136,11 @@ const Sidebar = ({
   open,
   setClosed,
   pendingRequestsCount,
+  pendingSubscriptionsCount,
   openIssuesCount,
   revalidateIssueCount,
   revalidateRequestsCount,
+  revalidateSubscriptionsCount,
 }: SidebarProps) => {
   const navRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -167,10 +171,16 @@ const Sidebar = ({
     if (pendingRequestsCount) {
       revalidateRequestsCount();
     }
+
+    if (pendingSubscriptionsCount) {
+      revalidateSubscriptionsCount();
+    }
   }, [
     revalidateIssueCount,
     revalidateRequestsCount,
+    revalidateSubscriptionsCount,
     pendingRequestsCount,
+    pendingSubscriptionsCount,
     openIssuesCount,
   ]);
 
