@@ -13,6 +13,7 @@
 ### Task 1: Database Entities & Migrations
 
 **Files:**
+
 - Modify: `server/entity/User.ts`
 - Create: `server/entity/SubscriptionPayment.ts`
 - Create: `server/entity/SubscriptionGift.ts`
@@ -70,12 +71,14 @@ export class SubscriptionGift {
 - [ ] **Step 3: Modify `server/entity/User.ts`**
 
 At the top of the file, add imports:
+
 ```typescript
 import { SubscriptionPayment } from './SubscriptionPayment';
 import { SubscriptionGift } from './SubscriptionGift';
 ```
 
 Inside the `User` class add:
+
 ```typescript
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   public subscriptionPricePerMonth?: number | null;
@@ -99,6 +102,7 @@ Run: `pnpm run migration:generate server/migration/SubscriptionTracking`
 Expected: Migration generated successfully.
 
 - [ ] **Step 5: Run tests to ensure no compilation errors**
+
 Run: `pnpm typecheck:server`
 Expected: PASS
 
@@ -112,6 +116,7 @@ git commit -m "feat: add subscription database entities and migrations"
 ### Task 2: Backend API Interfaces
 
 **Files:**
+
 - Modify: `server/interfaces/api/userInterfaces.ts`
 
 - [ ] **Step 1: Add new interfaces to `server/interfaces/api/userInterfaces.ts`**
@@ -157,6 +162,7 @@ git commit -m "feat: add subscription api interfaces"
 ### Task 3: API Helper function
 
 **Files:**
+
 - Create: `server/utils/subscriptionHelpers.ts`
 
 - [ ] **Step 1: Create helper to calculate subscription state**
@@ -228,6 +234,7 @@ git commit -m "feat: add subscription calculation helper"
 ### Task 4: Backend API Routes (User Subscription Detail)
 
 **Files:**
+
 - Modify: `server/routes/user/index.ts`
 
 - [ ] **Step 1: Add subscription detail endpoints**
@@ -400,6 +407,7 @@ git commit -m "feat: add user subscription detail routes"
 ### Task 5: Backend API Routes (Overview List)
 
 **Files:**
+
 - Create: `server/routes/subscription.ts`
 - Modify: `server/routes/index.ts`
 
@@ -463,12 +471,14 @@ git commit -m "feat: add subscription overview route"
 ### Task 6: Frontend API Hooks
 
 **Files:**
+
 - Modify: `src/hooks/useUser.ts` (if appropriate, or just inline `useSWR` in components). 
 Let's just use raw `useSWR` calls in components to avoid modifying extra files, keeping it DRY.
 
 ### Task 7: User Profile Settings Tab
 
 **Files:**
+
 - Modify: `src/components/UserProfile/UserSettings/index.tsx`
 - Create: `src/components/UserProfile/UserSettings/UserSubscriptionSettings/index.tsx`
 - Create: `src/pages/users/[userId]/settings/subscription.tsx`
@@ -702,6 +712,7 @@ git commit -m "feat: add user subscription settings tab"
 ### Task 8: Frontend Global Dashboard View
 
 **Files:**
+
 - Create: `src/pages/subscriptions/index.tsx`
 - Create: `src/components/SubscriptionList/index.tsx`
 
@@ -789,3 +800,4 @@ export default SubscriptionsPage;
 git add src/pages/subscriptions/index.tsx src/components/SubscriptionList/index.tsx
 git commit -m "feat: add global subscriptions overview page"
 ```
+
