@@ -4,7 +4,10 @@ import { describe, it } from 'node:test';
 import { SubscriptionGift } from '@server/entity/SubscriptionGift';
 import { SubscriptionPayment } from '@server/entity/SubscriptionPayment';
 import { User } from '@server/entity/User';
-import { calculateSubscriptionState } from '@server/utils/subscriptionHelpers';
+import {
+  calculateSubscriptionMissingTotal,
+  calculateSubscriptionState,
+} from '@server/utils/subscriptionHelpers';
 
 function createUser(overrides: Partial<User> = {}): User {
   const user = new User();
@@ -153,5 +156,45 @@ describe('calculateSubscriptionState', () => {
     const state = calculateSubscriptionState(user);
     assert.strictEqual(state.totalPaid, 20);
     assert.strictEqual(state.payments[0].status, 'pending');
+  });
+});
+
+describe('calculateSubscriptionMissingTotal', () => {
+  it('sums absolute negative balances for configured users only', () => {
+    const behind = createUser({
+      id: 2,
+      subscriptionStartDate: new Date('2020-01-01'),
+    });
+    const ahead = createUser({
+      id: 3,
+      subscriptionStartDate: new Date('2024-01-01'),
+      subscriptionPayments: [
+        Object.assign(new SubscriptionPayment(), {
+          id: 1,
+          date: new Date('2024-06-01'),
+          amount: 1000,
+          method: 'PayPal',
+          status: 'confirmed',
+          createdByUserId: 3,
+        }),
+      ],
+    });
+    const unconfigured = createUser({
+      id: 4,
+      subscriptionPricePerMonth: null,
+      subscriptionStartDate: null,
+    });
+
+    const missing = calculateSubscriptionMissingTotal([
+      behind,
+      ahead,
+      unconfigured,
+    ]);
+
+    assert.ok(missing > 0);
+    assert.strictEqual(
+      missing,
+      Math.abs(calculateSubscriptionState(behind).balance)
+    );
   });
 });

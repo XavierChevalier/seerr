@@ -43,6 +43,7 @@ const messages = defineMessages('components.SubscriptionPaymentsList', {
   totalPending: 'Total Pending',
   totalConfirmed: 'Total Confirmed',
   totalEligible: 'Total Pending + Confirmed',
+  totalMissing: 'Total Outstanding',
 });
 
 type PaymentStatusFilter = 'all' | SubscriptionPaymentStatus;
@@ -159,7 +160,12 @@ const SubscriptionPaymentsList = () => {
     return <LoadingSpinner />;
   }
 
-  const totals = data.totals ?? { pending: 0, confirmed: 0, eligible: 0 };
+  const totals = data.totals ?? {
+    pending: 0,
+    confirmed: 0,
+    eligible: 0,
+    missing: 0,
+  };
 
   return (
     <>
@@ -195,7 +201,7 @@ const SubscriptionPaymentsList = () => {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 divide-y divide-gray-700 overflow-hidden rounded-lg border border-gray-700 bg-gray-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <div className="mb-6 grid grid-cols-1 divide-y divide-gray-700 overflow-hidden rounded-lg border border-gray-700 bg-gray-800 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
         <div className="px-6 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
             {intl.formatMessage(messages.totalPending)}
@@ -218,6 +224,14 @@ const SubscriptionPaymentsList = () => {
           </p>
           <p className="mt-1 text-2xl font-bold text-white">
             {formatAmount(totals.eligible)}
+          </p>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            {intl.formatMessage(messages.totalMissing)}
+          </p>
+          <p className="mt-1 text-2xl font-bold text-red-400">
+            {formatAmount(totals.missing)}
           </p>
         </div>
       </div>

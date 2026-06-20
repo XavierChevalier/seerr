@@ -30,19 +30,6 @@ export function isEligiblePayment(payment: SubscriptionPayment): boolean {
   return payment.status === 'pending' || payment.status === 'confirmed';
 }
 
-export function getPendingPaymentStats(payments: SubscriptionPayment[] = []) {
-  const pending = payments.filter((p) => p.status === 'pending');
-  return {
-    pendingCount: pending.length,
-    pendingAmount: pending.reduce((sum, p) => sum + Number(p.amount), 0),
-    pendingPayments: pending.map((p) => ({
-      id: p.id,
-      amount: Number(p.amount),
-      date: new Date(p.date).toISOString().split('T')[0],
-    })),
-  };
-}
-
 export function calculateSubscriptionState(
   user: User
 ): UserSubscriptionResponse {
@@ -113,4 +100,28 @@ export function calculateSubscriptionState(
       }))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
   };
+}
+
+export function getPendingPaymentStats(payments: SubscriptionPayment[] = []) {
+  const pending = payments.filter((p) => p.status === 'pending');
+  return {
+    pendingCount: pending.length,
+    pendingAmount: pending.reduce((sum, p) => sum + Number(p.amount), 0),
+    pendingPayments: pending.map((p) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      date: new Date(p.date).toISOString().split('T')[0],
+    })),
+  };
+}
+
+export function calculateSubscriptionMissingTotal(users: User[]): number {
+  return users.reduce((sum, user) => {
+    if (!isSubscriptionConfigured(user)) {
+      return sum;
+    }
+
+    const { balance } = calculateSubscriptionState(user);
+    return balance < 0 ? sum + Math.abs(balance) : sum;
+  }, 0);
 }

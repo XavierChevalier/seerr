@@ -29,6 +29,7 @@ const messages = defineMessages('components.SubscriptionList', {
   receivedDate: 'Reception Date',
   statusActive: 'Active',
   statusInactive: 'Inactive',
+  totalMissing: 'Total Outstanding',
 });
 
 const SubscriptionList = () => {
@@ -81,6 +82,17 @@ const SubscriptionList = () => {
       <PageTitle title={intl.formatMessage(messages.title)} />
       <div className="mb-4">
         <Header>{intl.formatMessage(messages.title)}</Header>
+      </div>
+
+      <div className="mb-6 overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            {intl.formatMessage(messages.totalMissing)}
+          </p>
+          <p className="mt-1 text-2xl font-bold text-red-400">
+            €{(data?.totals?.missing ?? 0).toFixed(2)}
+          </p>
+        </div>
       </div>
 
       <div className="overflow-x-auto">

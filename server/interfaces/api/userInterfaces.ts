@@ -1,6 +1,5 @@
 import type Media from '@server/entity/Media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
-import type { User } from '@server/entity/User';
 import type { PaginatedResponse } from './common';
 
 export interface UserListItem {
@@ -102,6 +101,9 @@ export interface SubscriptionStatusResponse {
 
 export interface SubscriptionOverviewResponse {
   results: SubscriptionOverviewItem[];
+  totals: {
+    missing: number;
+  };
 }
 
 export interface SubscriptionCountResponse {
@@ -130,5 +132,6 @@ export interface SubscriptionPaymentsResponse {
     pending: number;
     confirmed: number;
     eligible: number;
+    missing: number;
   };
 }

@@ -4,6 +4,7 @@ import { User } from '@server/entity/User';
 import { Permission } from '@server/lib/permissions';
 import { isAuthenticated } from '@server/middleware/auth';
 import {
+  calculateSubscriptionMissingTotal,
   calculateSubscriptionState,
   getPendingPaymentStats,
   isSubscriptionConfigured,
@@ -68,7 +69,10 @@ subscriptionRoutes.get(
         };
       });
 
-      return res.status(200).json({ results });
+      return res.status(200).json({
+        results,
+        totals: { missing: calculateSubscriptionMissingTotal(users) },
+      });
     } catch (e) {
       next({ status: 500, message: e.message });
     }
@@ -113,6 +117,10 @@ subscriptionRoutes.get(
 
       const payments = await paymentQuery.getMany();
 
+      const users = await getRepository(User).find({
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+
       const totalRows = await getRepository(SubscriptionPayment)
         .createQueryBuilder('payment')
         .select('payment.status', 'status')
@@ -156,6 +164,7 @@ subscriptionRoutes.get(
           pending: pendingTotal,
           confirmed: confirmedTotal,
           eligible: pendingTotal + confirmedTotal,
+          missing: calculateSubscriptionMissingTotal(users),
         },
       });
     } catch (e) {
