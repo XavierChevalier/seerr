@@ -638,7 +638,7 @@ router.post(
       }
 
       payment.status = 'rejected';
-      payment.rejectionReason = req.body.rejectionReason ?? null;
+      payment.rejectionReason = req.body?.rejectionReason ?? null;
       await paymentRepo.save(payment);
 
       return respondWithSubscriptionState(userId, res);
