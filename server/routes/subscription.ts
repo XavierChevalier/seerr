@@ -75,6 +75,67 @@ subscriptionRoutes.get(
   }
 );
 
+const SUBSCRIPTION_PAYMENT_STATUS_FILTERS = [
+  'all',
+  'pending',
+  'confirmed',
+  'rejected',
+] as const;
+
+type SubscriptionPaymentStatusFilter =
+  (typeof SUBSCRIPTION_PAYMENT_STATUS_FILTERS)[number];
+
+subscriptionRoutes.get(
+  '/payments',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    try {
+      const rawStatus = req.query.status;
+      const statusFilter: SubscriptionPaymentStatusFilter =
+        typeof rawStatus === 'string' &&
+        (SUBSCRIPTION_PAYMENT_STATUS_FILTERS as readonly string[]).includes(
+          rawStatus
+        )
+          ? (rawStatus as SubscriptionPaymentStatusFilter)
+          : 'all';
+
+      const paymentQuery = getRepository(SubscriptionPayment)
+        .createQueryBuilder('payment')
+        .leftJoinAndSelect('payment.user', 'user')
+        .orderBy('payment.date', 'DESC')
+        .addOrderBy('payment.id', 'DESC');
+
+      if (statusFilter !== 'all') {
+        paymentQuery.where('payment.status = :status', {
+          status: statusFilter,
+        });
+      }
+
+      const payments = await paymentQuery.getMany();
+
+      const results = payments.map((payment) => ({
+        id: payment.id,
+        date: new Date(payment.date).toISOString().split('T')[0],
+        amount: Number(payment.amount),
+        method: payment.method,
+        status: payment.status ?? 'confirmed',
+        rejectionReason: payment.rejectionReason ?? null,
+        createdByUserId: payment.createdByUserId,
+        user: {
+          id: payment.user.id,
+          displayName: payment.user.displayName,
+          email: payment.user.email,
+          avatar: payment.user.avatar,
+        },
+      }));
+
+      return res.status(200).json({ results });
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
 subscriptionRoutes.get(
   '/count',
   isAuthenticated(Permission.MANAGE_USERS),

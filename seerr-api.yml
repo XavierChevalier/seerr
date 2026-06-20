@@ -2090,6 +2090,36 @@ components:
               date:
                 type: string
                 format: date
+    SubscriptionPaymentListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        amount:
+          type: number
+        method:
+          type: string
+        status:
+          $ref: '#/components/schemas/SubscriptionPaymentStatus'
+        rejectionReason:
+          type: string
+          nullable: true
+        createdByUserId:
+          type: integer
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+            displayName:
+              type: string
+            email:
+              type: string
+            avatar:
+              type: string
     SubscriptionStatusResponse:
       type: object
       properties:
@@ -5029,6 +5059,31 @@ paths:
                 properties:
                   pending:
                     type: number
+  /subscription/payments:
+    get:
+      summary: List subscription payments
+      description: Returns all subscription payments with optional status filter. Requires `MANAGE_USERS` permission.
+      tags:
+        - users
+      parameters:
+        - in: query
+          name: status
+          description: Filter by payment status
+          schema:
+            type: string
+            enum: [all, pending, confirmed, rejected]
+      responses:
+        '200':
+          description: Subscription payments returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubscriptionPaymentListItem'
   /subscription/status:
     get:
       summary: Get current user subscription status

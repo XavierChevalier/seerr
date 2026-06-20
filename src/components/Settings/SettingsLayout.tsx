@@ -19,6 +19,7 @@ const messages = defineMessages('components.Settings', {
   menuJobs: 'Jobs & Cache',
   menuAbout: 'About',
   menuMetadataProviders: 'Metadata Providers',
+  menuSubscription: 'Subscription',
 });
 
 type SettingsLayoutProps = {
@@ -38,6 +39,11 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
       text: intl.formatMessage(messages.menuUsers),
       route: '/settings/users',
       regex: /^\/settings\/users/,
+    },
+    {
+      text: intl.formatMessage(messages.menuSubscription),
+      route: '/settings/subscription',
+      regex: /^\/settings\/subscription/,
     },
     settings.currentSettings.mediaServerType === MediaServerType.PLEX
       ? {

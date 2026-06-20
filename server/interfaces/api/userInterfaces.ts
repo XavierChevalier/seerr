@@ -88,3 +88,23 @@ export interface SubscriptionOverviewResponse {
 export interface SubscriptionCountResponse {
   pending: number;
 }
+
+export interface SubscriptionPaymentListItem {
+  id: number;
+  date: string;
+  amount: number;
+  method: string;
+  status: SubscriptionPaymentStatus;
+  rejectionReason: string | null;
+  createdByUserId: number;
+  user: {
+    id: number;
+    displayName: string;
+    email: string;
+    avatar: string;
+  };
+}
+
+export interface SubscriptionPaymentsResponse {
+  results: SubscriptionPaymentListItem[];
+}

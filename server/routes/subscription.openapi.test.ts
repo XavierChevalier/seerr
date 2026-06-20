@@ -24,12 +24,14 @@ describe('subscription OpenAPI spec', () => {
     assert.ok(spec.paths['/user/{userId}/subscription/gift/{giftId}']);
     assert.ok(spec.paths['/subscription']);
     assert.ok(spec.paths['/subscription/count']);
+    assert.ok(spec.paths['/subscription/payments']);
     assert.ok(spec.paths['/subscription/status']);
   });
 
   it('declares subscription response schemas', () => {
     assert.ok(spec.components.schemas.UserSubscription);
     assert.ok(spec.components.schemas.SubscriptionOverviewItem);
+    assert.ok(spec.components.schemas.SubscriptionPaymentListItem);
     assert.ok(spec.components.schemas.SubscriptionStatusResponse);
     assert.ok(spec.components.schemas.SubscriptionPaymentStatus);
   });
