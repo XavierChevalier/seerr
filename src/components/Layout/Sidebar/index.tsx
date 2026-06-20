@@ -34,7 +34,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   users: 'Users',
   settings: 'Settings',
   subscription: 'Subscription',
-  subscriptions: 'Subscriptions',
+  subscriptions: 'Subscription',
 });
 
 interface SidebarProps {
@@ -88,7 +88,7 @@ const SidebarLinks: SidebarLinkProps[] = [
     href: '/subscription',
     messagesKey: 'subscription',
     svgIcon: <CreditCardIcon className="mr-3 h-6 w-6" />,
-    activeRegExp: /^\/subscription/,
+    activeRegExp: /^\/subscription(\/?$)/,
     dataTestId: 'sidebar-menu-subscription',
   },
   {
@@ -121,6 +121,14 @@ const SidebarLinks: SidebarLinkProps[] = [
     activeRegExp: /^\/users/,
     requiredPermission: Permission.MANAGE_USERS,
     dataTestId: 'sidebar-menu-users',
+  },
+  {
+    href: '/subscriptions',
+    messagesKey: 'subscriptions',
+    svgIcon: <CreditCardIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/subscriptions/,
+    requiredPermission: Permission.MANAGE_USERS,
+    dataTestId: 'sidebar-menu-subscriptions',
   },
   {
     href: '/settings',
@@ -340,6 +348,21 @@ const Sidebar = ({
                               }`}
                             >
                               {openIssuesCount}
+                            </Badge>
+                          </div>
+                        )}
+                      {sidebarLink.messagesKey === 'subscriptions' &&
+                        pendingSubscriptionsCount > 0 &&
+                        hasPermission(Permission.MANAGE_USERS) && (
+                          <div className="ml-auto flex">
+                            <Badge
+                              className={`rounded-md bg-gradient-to-br ${
+                                router.pathname.match(sidebarLink.activeRegExp)
+                                  ? 'border-indigo-600 from-indigo-700 to-purple-700'
+                                  : 'border-indigo-500 from-indigo-600 to-purple-600'
+                              }`}
+                            >
+                              {pendingSubscriptionsCount}
                             </Badge>
                           </div>
                         )}

@@ -107,4 +107,9 @@ export interface SubscriptionPaymentListItem {
 
 export interface SubscriptionPaymentsResponse {
   results: SubscriptionPaymentListItem[];
+  totals: {
+    pending: number;
+    confirmed: number;
+    eligible: number;
+  };
 }

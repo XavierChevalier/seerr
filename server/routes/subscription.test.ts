@@ -325,6 +325,9 @@ describe('GET /subscription/payments', () => {
     assert.strictEqual(res.status, 200);
     assert.ok(Array.isArray(res.body.results));
     assert.strictEqual(res.body.results.length, 2);
+    assert.strictEqual(res.body.totals.pending, 15);
+    assert.strictEqual(res.body.totals.confirmed, 20);
+    assert.strictEqual(res.body.totals.eligible, 35);
     assert.ok(
       res.body.results.every(
         (item: { user: { id: number } }) => item.user.id === userId

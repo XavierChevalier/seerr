@@ -48,16 +48,22 @@ describe('User Subscription Settings', () => {
       });
   });
 
-  it('opens the global subscriptions overview', () => {
-    cy.intercept('GET', '/api/v1/subscription').as('getSubscriptionOverview');
+  it('opens the admin subscription payments page', () => {
+    cy.intercept('GET', '/api/v1/subscription/payments?status=pending').as(
+      'getSubscriptionPayments'
+    );
 
     cy.visit('/subscriptions');
 
-    cy.wait('@getSubscriptionOverview')
+    cy.wait('@getSubscriptionPayments')
       .its('response.statusCode')
       .should('eq', 200);
-    cy.contains('Subscriptions Overview').should('be.visible');
+    cy.contains('Payment List').should('be.visible');
     cy.get('table').should('be.visible');
+  });
+
+  it('shows admin subscription menu in sidebar', () => {
+    cy.get('[data-testid=sidebar-menu-subscriptions]').should('be.visible');
   });
 
   it('shows Abonnement menu when subscription is configured', () => {

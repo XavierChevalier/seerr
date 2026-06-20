@@ -5084,6 +5084,15 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/SubscriptionPaymentListItem'
+                  totals:
+                    type: object
+                    properties:
+                      pending:
+                        type: number
+                      confirmed:
+                        type: number
+                      eligible:
+                        type: number
   /subscription/status:
     get:
       summary: Get current user subscription status

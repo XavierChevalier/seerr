@@ -1,7 +1,9 @@
 import Alert from '@app/components/Common/Alert';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
+import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import PageTitle from '@app/components/Common/PageTitle';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { FunnelIcon } from '@heroicons/react/24/outline';
@@ -16,7 +18,7 @@ import { useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR, { useSWRConfig } from 'swr';
 
-const messages = defineMessages('components.Settings.SettingsSubscription', {
+const messages = defineMessages('components.SubscriptionPaymentsList', {
   title: 'Subscription',
   description: 'Review and manage subscription payment transactions.',
   loadError: 'Unable to load subscription payments.',
@@ -38,6 +40,9 @@ const messages = defineMessages('components.Settings.SettingsSubscription', {
   methodPayPal: 'PayPal',
   methodVirementSepa: 'SEPA Transfer',
   noPayments: 'No payments match the selected filter.',
+  totalPending: 'Total Pending',
+  totalConfirmed: 'Total Confirmed',
+  totalEligible: 'Total Pending + Confirmed',
 });
 
 type PaymentStatusFilter = 'all' | SubscriptionPaymentStatus;
@@ -58,7 +63,7 @@ const formatDisplayDate = (date: string) => {
   return `${day}/${month}/${year}`;
 };
 
-const SettingsSubscription = () => {
+const SubscriptionPaymentsList = () => {
   const intl = useIntl();
   const { mutate: globalMutate } = useSWRConfig();
   const [statusFilter, setStatusFilter] =
@@ -75,6 +80,12 @@ const SettingsSubscription = () => {
   const { data, error, mutate } = useSWR<SubscriptionPaymentsResponse>(
     `/api/v1/subscription/payments?status=${statusFilter}`
   );
+
+  const formatAmount = (amount: number) =>
+    intl.formatNumber(amount, {
+      style: 'currency',
+      currency: 'EUR',
+    });
 
   const formatPaymentMethod = (method: string) => {
     const message =
@@ -137,23 +148,21 @@ const SettingsSubscription = () => {
 
   if (error) {
     return (
-      <Alert title={intl.formatMessage(messages.loadError)} type="error" />
+      <>
+        <PageTitle title={intl.formatMessage(messages.title)} />
+        <Alert title={intl.formatMessage(messages.loadError)} type="error" />
+      </>
     );
   }
 
-  return (
-    <div className="section">
-      <div className="form-row">
-        <div className="form-header">
-          <div className="form-title">{intl.formatMessage(messages.title)}</div>
-          <div className="form-description">
-            {intl.formatMessage(messages.description)}
-          </div>
-        </div>
-      </div>
+  const totals = data.totals ?? { pending: 0, confirmed: 0, eligible: 0 };
 
-      <div className="mb-4 flex justify-end">
-        <div className="flex flex-grow sm:flex-grow-0">
+  return (
+    <>
+      <PageTitle title={intl.formatMessage(messages.title)} />
+      <div className="mb-4 flex flex-col justify-between lg:flex-row lg:items-end">
+        <Header>{intl.formatMessage(messages.title)}</Header>
+        <div className="mt-2 flex flex-grow sm:flex-grow-0">
           <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-sm text-gray-100">
             <FunnelIcon className="h-6 w-6" />
           </span>
@@ -179,6 +188,33 @@ const SettingsSubscription = () => {
               {intl.formatMessage(messages.statusRejected)}
             </option>
           </select>
+        </div>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 divide-y divide-gray-700 overflow-hidden rounded-lg border border-gray-700 bg-gray-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            {intl.formatMessage(messages.totalPending)}
+          </p>
+          <p className="mt-1 text-2xl font-bold text-amber-400">
+            {formatAmount(totals.pending)}
+          </p>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            {intl.formatMessage(messages.totalConfirmed)}
+          </p>
+          <p className="mt-1 text-2xl font-bold text-green-400">
+            {formatAmount(totals.confirmed)}
+          </p>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            {intl.formatMessage(messages.totalEligible)}
+          </p>
+          <p className="mt-1 text-2xl font-bold text-white">
+            {formatAmount(totals.eligible)}
+          </p>
         </div>
       </div>
 
@@ -231,7 +267,7 @@ const SettingsSubscription = () => {
                   {formatDisplayDate(payment.date)}
                 </td>
                 <td className="px-6 py-4 text-gray-100">
-                  €{payment.amount.toFixed(2)}
+                  {formatAmount(payment.amount)}
                 </td>
                 <td className="px-6 py-4 text-gray-100">
                   {formatPaymentMethod(payment.method)}
@@ -333,8 +369,8 @@ const SettingsSubscription = () => {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 };
 
-export default SettingsSubscription;
+export default SubscriptionPaymentsList;

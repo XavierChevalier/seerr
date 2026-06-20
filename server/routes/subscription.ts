@@ -113,6 +113,27 @@ subscriptionRoutes.get(
 
       const payments = await paymentQuery.getMany();
 
+      const totalRows = await getRepository(SubscriptionPayment)
+        .createQueryBuilder('payment')
+        .select('payment.status', 'status')
+        .addSelect('COALESCE(SUM(payment.amount), 0)', 'total')
+        .where('payment.status IN (:...statuses)', {
+          statuses: ['pending', 'confirmed'],
+        })
+        .groupBy('payment.status')
+        .getRawMany<{ status: string; total: string }>();
+
+      let pendingTotal = 0;
+      let confirmedTotal = 0;
+      for (const row of totalRows) {
+        const total = Number(row.total);
+        if (row.status === 'pending') {
+          pendingTotal = total;
+        } else if (row.status === 'confirmed') {
+          confirmedTotal = total;
+        }
+      }
+
       const results = payments.map((payment) => ({
         id: payment.id,
         date: new Date(payment.date).toISOString().split('T')[0],
@@ -129,7 +150,14 @@ subscriptionRoutes.get(
         },
       }));
 
-      return res.status(200).json({ results });
+      return res.status(200).json({
+        results,
+        totals: {
+          pending: pendingTotal,
+          confirmed: confirmedTotal,
+          eligible: pendingTotal + confirmedTotal,
+        },
+      });
     } catch (e) {
       next({ status: 500, message: e.message });
     }
