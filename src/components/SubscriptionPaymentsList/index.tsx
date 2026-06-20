@@ -146,13 +146,17 @@ const SubscriptionPaymentsList = () => {
     return <LoadingSpinner />;
   }
 
-  if (error) {
-    return (
-      <>
-        <PageTitle title={intl.formatMessage(messages.title)} />
-        <Alert title={intl.formatMessage(messages.loadError)} type="error" />
-      </>
-    );
+  if (error || !data) {
+    if (error) {
+      return (
+        <>
+          <PageTitle title={intl.formatMessage(messages.title)} />
+          <Alert title={intl.formatMessage(messages.loadError)} type="error" />
+        </>
+      );
+    }
+
+    return <LoadingSpinner />;
   }
 
   const totals = data.totals ?? { pending: 0, confirmed: 0, eligible: 0 };
