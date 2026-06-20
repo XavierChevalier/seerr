@@ -51,6 +51,7 @@ const messages = defineMessages('components.UserList', {
   totalrequests: 'Requests',
   accounttype: 'Type',
   role: 'Role',
+  subscriptionbalance: 'Balance',
   created: 'Joined',
   bulkedit: 'Bulk Edit',
   owner: 'Owner',
@@ -742,6 +743,9 @@ const UserList = () => {
             >
               {intl.formatMessage(messages.role)}
             </SortableColumnHeader>
+            <Table.TH>
+              {intl.formatMessage(messages.subscriptionbalance)}
+            </Table.TH>
             <SortableColumnHeader
               sortKey="created"
               currentSort={currentSort}
@@ -868,6 +872,23 @@ const UserList = () => {
                     : intl.formatMessage(messages.user)}
               </Table.TD>
               <Table.TD>
+                {user.subscriptionBalance != null ? (
+                  <Link
+                    href={`/users/${user.id}/settings/subscription`}
+                    className={`text-sm leading-5 transition duration-300 hover:underline ${
+                      user.subscriptionStatus === 'Actif'
+                        ? 'text-green-500'
+                        : 'text-red-500'
+                    }`}
+                    data-testid="user-list-subscription-balance"
+                  >
+                    €{user.subscriptionBalance.toFixed(2)}
+                  </Link>
+                ) : (
+                  '-'
+                )}
+              </Table.TD>
+              <Table.TD>
                 {intl.formatDate(user.createdAt, {
                   year: 'numeric',
                   month: 'long',
@@ -904,7 +925,7 @@ const UserList = () => {
               </Table.TD>
             </tr>
           ))}
-          <tr className="bg-gray-700">
+          <tr key="user-list-pagination" className="bg-gray-700">
             <Table.TD colSpan={8} noPadding>
               <nav
                 className="flex w-screen flex-col items-center space-x-4 space-y-3 px-6 py-3 sm:flex-row sm:space-y-0 lg:w-full"

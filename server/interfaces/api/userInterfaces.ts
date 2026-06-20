@@ -3,8 +3,13 @@ import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { User } from '@server/entity/User';
 import type { PaginatedResponse } from './common';
 
+export interface UserListItem extends Partial<User> {
+  subscriptionBalance?: number | null;
+  subscriptionStatus?: 'Actif' | 'Inactif' | null;
+}
+
 export interface UserResultsResponse extends PaginatedResponse {
-  results: User[];
+  results: UserListItem[];
 }
 
 export interface UserRequestsResponse extends PaginatedResponse {

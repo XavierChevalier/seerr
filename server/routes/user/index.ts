@@ -174,6 +174,39 @@ router.get('/', async (req, res, next) => {
       .distinct(true)
       .getManyAndCount();
 
+    const canManageUsers = req.user?.hasPermission(Permission.MANAGE_USERS);
+    const filteredUsers = User.filterMany(users, canManageUsers);
+
+    let subscriptionByUserId = new Map<
+      number,
+      { balance: number; status: 'Actif' | 'Inactif' }
+    >();
+
+    if (canManageUsers && users.length > 0) {
+      const usersWithSubscription = await getRepository(User).find({
+        where: { id: In(users.map((user) => user.id)) },
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+
+      subscriptionByUserId = new Map(
+        usersWithSubscription.filter(isSubscriptionConfigured).map((user) => {
+          const state = calculateSubscriptionState(user);
+          return [user.id, { balance: state.balance, status: state.status }];
+        })
+      );
+    }
+
+    const results = canManageUsers
+      ? filteredUsers.map((user) => {
+          const subscription = subscriptionByUserId.get(user.id!);
+          return {
+            ...user,
+            subscriptionBalance: subscription?.balance ?? null,
+            subscriptionStatus: subscription?.status ?? null,
+          };
+        })
+      : filteredUsers;
+
     return res.status(200).json({
       pageInfo: {
         pages: Math.ceil(userCount / pageSize),
@@ -181,10 +214,7 @@ router.get('/', async (req, res, next) => {
         results: userCount,
         page: Math.ceil(skip / pageSize) + 1,
       },
-      results: User.filterMany(
-        users,
-        req.user?.hasPermission(Permission.MANAGE_USERS)
-      ),
+      results,
     } as UserResultsResponse);
   } catch (e) {
     next({ status: 500, message: e.message });

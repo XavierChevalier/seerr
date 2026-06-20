@@ -572,3 +572,46 @@ describe('user-declared payments', () => {
     assert.strictEqual(res.status, 403);
   });
 });
+
+describe('GET /user', () => {
+  let userId: number;
+
+  beforeEach(async () => {
+    userId = await getFriendUserId();
+  });
+
+  it('includes subscription balance for admins', async () => {
+    const adminAgent = await loginAs('admin@seerr.dev', 'test1234');
+    await adminAgent.put(`/user/${userId}/subscription`).send({
+      pricePerMonth: 10,
+      startDate: '2024-01-01',
+      preference: 'Mensuel',
+    });
+    await adminAgent.post(`/user/${userId}/subscription/payment`).send({
+      date: '2024-06-01',
+      amount: 120,
+      method: 'PayPal',
+    });
+
+    const res = await adminAgent.get('/user?take=50&skip=0');
+
+    assert.strictEqual(res.status, 200);
+    const friend = res.body.results.find(
+      (user: { id: number }) => user.id === userId
+    );
+    assert.ok(friend);
+    assert.strictEqual(typeof friend.subscriptionBalance, 'number');
+    assert.ok(['Actif', 'Inactif'].includes(friend.subscriptionStatus));
+  });
+
+  it('does not include subscription balance for non-admin users', async () => {
+    const userAgent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await userAgent.get('/user?take=50&skip=0');
+
+    assert.strictEqual(res.status, 200);
+    for (const user of res.body.results) {
+      assert.strictEqual(user.subscriptionBalance, undefined);
+      assert.strictEqual(user.subscriptionStatus, undefined);
+    }
+  });
+});
