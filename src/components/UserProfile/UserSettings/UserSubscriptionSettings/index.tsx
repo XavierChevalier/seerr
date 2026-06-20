@@ -26,6 +26,7 @@ const messages = defineMessages(
     remainingMonths: 'Remaining Months',
     totalPaid: 'Total Paid',
     balance: 'Balance',
+    planDetails: 'Plan Details',
     baseConfiguration: 'Base Configuration',
     monthlyPrice: 'Monthly Price (€)',
     startDate: 'Start Date',
@@ -102,28 +103,6 @@ const messages = defineMessages(
     subscriptionRate: '{amount}/month',
     subscriptionMemberSince: 'Member since {date}',
   }
-);
-
-interface SummaryStatProps {
-  label: string;
-  value: string;
-  hint?: string;
-  valueClassName?: string;
-}
-
-const SummaryStat = ({
-  label,
-  value,
-  hint,
-  valueClassName = 'text-white',
-}: SummaryStatProps) => (
-  <div className="px-6 py-4">
-    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-      {label}
-    </p>
-    <p className={`mt-1 text-2xl font-bold ${valueClassName}`}>{value}</p>
-    {hint && <p className="mt-1 text-sm text-gray-400">{hint}</p>}
-  </div>
 );
 
 const formatCurrency = (amount: number) =>
@@ -540,67 +519,73 @@ const UserSubscriptionSettings = () => {
         </div>
       )}
 
-      <div className="mb-8 overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow">
+      <div className="mb-8 space-y-3">
+        {/* Status banner — focused solely on the alert message */}
         <div
-          className={`border-b border-gray-700 px-6 py-4 ${
-            isActive ? 'bg-green-500/10' : 'bg-red-500/10'
+          className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${
+            isActive
+              ? 'border-green-500/20 bg-green-500/10'
+              : 'border-red-500/20 bg-red-500/10'
           }`}
         >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge badgeType={isActive ? 'success' : 'danger'}>
-                {isActive
-                  ? intl.formatMessage(messages.statusActive)
-                  : intl.formatMessage(messages.statusInactive)}
-              </Badge>
-              <p className="text-sm text-gray-200">
-                {isActive
-                  ? intl.formatMessage(messages.statusSummaryActive)
-                  : intl.formatMessage(messages.statusSummaryInactive, {
-                      months: monthsBehind,
-                    })}
+          <Badge badgeType={isActive ? 'success' : 'danger'}>
+            {isActive
+              ? intl.formatMessage(messages.statusActive)
+              : intl.formatMessage(messages.statusInactive)}
+          </Badge>
+          <p className="text-sm text-gray-200">
+            {isActive
+              ? intl.formatMessage(messages.statusSummaryActive)
+              : intl.formatMessage(messages.statusSummaryInactive, {
+                  months: monthsBehind,
+                })}
+          </p>
+        </div>
+
+        {/* Financial summary cards */}
+        {isConfigured && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {/* Plan details */}
+            <div className="rounded-lg border border-gray-700 bg-gray-800 px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {intl.formatMessage(messages.planDetails)}
               </p>
-            </div>
-            {data.pricePerMonth != null && (
-              <div className="text-right text-sm text-gray-400">
-                <p>
+              {data.pricePerMonth != null && (
+                <p className="mt-2 text-lg font-bold text-white">
                   {intl.formatMessage(messages.subscriptionRate, {
                     amount: formatCurrency(data.pricePerMonth),
                   })}
                 </p>
-                {data.startDate && (
-                  <p className="mt-1">
-                    {intl.formatMessage(messages.subscriptionMemberSince, {
-                      date: formatSubscriptionDate(intl, data.startDate),
-                    })}
-                  </p>
-                )}
-              </div>
-            )}
-            {!data.pricePerMonth && data.startDate && (
-              <p className="text-sm text-gray-400">
-                {intl.formatMessage(messages.subscriptionMemberSince, {
-                  date: formatSubscriptionDate(intl, data.startDate),
-                })}
-              </p>
-            )}
-          </div>
-        </div>
+              )}
+              {data.startDate && (
+                <p className="mt-1 text-xs text-gray-400">
+                  {intl.formatMessage(messages.subscriptionMemberSince, {
+                    date: formatSubscriptionDate(intl, data.startDate),
+                  })}
+                </p>
+              )}
+            </div>
 
-        <div className="grid grid-cols-1 divide-y divide-gray-700 sm:grid-cols-2 lg:divide-x lg:divide-y-0">
-          <SummaryStat
-            label={intl.formatMessage(messages.totalPaid)}
-            value={formatCurrency(data.totalPaid)}
-            hint={intl.formatMessage(messages.totalPaidHint)}
-            valueClassName="text-white"
-          />
-          <SummaryStat
-            label={intl.formatMessage(messages.balance)}
-            value={formatCurrency(data.balance)}
-            hint={balanceHint}
-            valueClassName={balanceClassName}
-          />
-        </div>
+            {/* Balance — tinted to draw attention */}
+            <div
+              className={`rounded-lg border px-5 py-4 ${
+                data.balance > 0
+                  ? 'border-green-500/20 bg-green-500/5'
+                  : data.balance < 0
+                    ? 'border-red-500/20 bg-red-500/5'
+                    : 'border-gray-700 bg-gray-800'
+              }`}
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {intl.formatMessage(messages.balance)}
+              </p>
+              <p className={`mt-2 text-2xl font-bold ${balanceClassName}`}>
+                {formatCurrency(data.balance)}
+              </p>
+              <p className="mt-1 text-xs text-gray-400">{balanceHint}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {showBaseConfig && (
