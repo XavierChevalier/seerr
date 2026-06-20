@@ -5,6 +5,7 @@ import type { User } from '@app/hooks/useUser';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import type { UserListItem } from '@server/interfaces/api/userInterfaces';
 import { hasPermission } from '@server/lib/permissions';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -12,7 +13,7 @@ import { useIntl } from 'react-intl';
 
 interface BulkEditProps {
   selectedUserIds: number[];
-  users?: User[];
+  users?: UserListItem[];
   onCancel?: () => void;
   onComplete?: (updatedUsers: User[]) => void;
   onSaving?: (isSaving: boolean) => void;

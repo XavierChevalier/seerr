@@ -30,7 +30,10 @@ import {
   UserPlusIcon,
 } from '@heroicons/react/24/solid';
 import { MediaServerType } from '@server/constants/server';
-import type { UserResultsResponse } from '@server/interfaces/api/userInterfaces';
+import type {
+  UserListItem,
+  UserResultsResponse,
+} from '@server/interfaces/api/userInterfaces';
 import { hasPermission } from '@server/lib/permissions';
 import axios from 'axios';
 import { Field, Form, Formik } from 'formik';
@@ -149,7 +152,7 @@ const UserList = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
-    user?: User;
+    user?: UserListItem;
   }>({
     isOpen: false,
   });

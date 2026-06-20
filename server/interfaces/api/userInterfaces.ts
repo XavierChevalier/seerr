@@ -3,7 +3,21 @@ import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { User } from '@server/entity/User';
 import type { PaginatedResponse } from './common';
 
-export interface UserListItem extends Partial<User> {
+export interface UserListItem {
+  id: number;
+  permissions: number;
+  displayName: string;
+  avatar: string;
+  email?: string;
+  plexId?: number | null;
+  plexUsername?: string | null;
+  jellyfinUserId?: string | null;
+  jellyfinUsername?: string | null;
+  username?: string;
+  userType?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+  requestCount?: number;
   subscriptionBalance?: number | null;
   subscriptionStatus?: 'Actif' | 'Inactif' | null;
 }

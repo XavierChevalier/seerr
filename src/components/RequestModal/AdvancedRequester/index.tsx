@@ -138,24 +138,26 @@ const AdvancedRequester = ({
   );
   const filteredUserData = useMemo(
     () =>
-      userData?.results.filter((user) =>
-        hasPermission(
-          is4k
-            ? [
-                Permission.REQUEST_4K,
-                type === 'movie'
-                  ? Permission.REQUEST_4K_MOVIE
-                  : Permission.REQUEST_4K_TV,
-              ]
-            : [
-                Permission.REQUEST,
-                type === 'movie'
-                  ? Permission.REQUEST_MOVIE
-                  : Permission.REQUEST_TV,
-              ],
-          user.permissions,
-          { type: 'or' }
-        )
+      userData?.results.filter(
+        (user) =>
+          user.permissions != null &&
+          hasPermission(
+            is4k
+              ? [
+                  Permission.REQUEST_4K,
+                  type === 'movie'
+                    ? Permission.REQUEST_4K_MOVIE
+                    : Permission.REQUEST_4K_TV,
+                ]
+              : [
+                  Permission.REQUEST,
+                  type === 'movie'
+                    ? Permission.REQUEST_MOVIE
+                    : Permission.REQUEST_TV,
+                ],
+            user.permissions,
+            { type: 'or' }
+          )
       ),
     [userData?.results]
   );
@@ -169,7 +171,7 @@ const AdvancedRequester = ({
         setIgnoreQuota(false);
       }
 
-      setSelectedUser(nextSelectedUser);
+      setSelectedUser(nextSelectedUser as User);
     }
   }, [filteredUserData]);
 
