@@ -28,8 +28,11 @@ import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
 import { isOwnProfileOrAdmin } from '@server/utils/profileMiddleware';
 import {
   calculateSubscriptionState,
+  canConfigureRecurringTransfer,
   isSubscriptionConfigured,
+  isValidRecurringDayOfMonth,
   isValidSubscriptionPaymentMethod,
+  isValidUserSubscriptionPreference,
 } from '@server/utils/subscriptionHelpers';
 import type { Request, Response } from 'express';
 import { Router } from 'express';
@@ -494,6 +497,97 @@ router.put(
         ? new Date(req.body.startDate)
         : null;
       user.subscriptionPreference = req.body.preference;
+
+      if (!canConfigureRecurringTransfer(user)) {
+        user.subscriptionRecurringEnabled = false;
+        user.subscriptionRecurringDayOfMonth = null;
+      } else if (req.body.recurringEnabled != null) {
+        if (req.body.recurringEnabled) {
+          if (!canConfigureRecurringTransfer(user)) {
+            return next({
+              status: 400,
+              message:
+                'Recurring transfers cannot be enabled for this subscription.',
+            });
+          }
+
+          if (!isValidRecurringDayOfMonth(req.body.recurringDayOfMonth)) {
+            return next({
+              status: 400,
+              message: 'Recurring day of month must be between 1 and 28.',
+            });
+          }
+
+          user.subscriptionRecurringEnabled = true;
+          user.subscriptionRecurringDayOfMonth = req.body.recurringDayOfMonth;
+        } else {
+          user.subscriptionRecurringEnabled = false;
+          user.subscriptionRecurringDayOfMonth = null;
+        }
+      }
+
+      await userRepository.save(user);
+
+      return res.status(200).json(calculateSubscriptionState(user));
+    } catch (e) {
+      next({ status: 500, message: e.message });
+    }
+  }
+);
+
+router.patch(
+  '/:id/subscription/recurring',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    try {
+      const userRepository = getRepository(User);
+      const user = await userRepository.findOne({
+        where: { id: Number(req.params.id) },
+        relations: ['subscriptionPayments', 'subscriptionGifts'],
+      });
+
+      if (!user) {
+        return next({ status: 404, message: 'User not found' });
+      }
+
+      if (req.body.preference != null) {
+        if (!isValidUserSubscriptionPreference(req.body.preference)) {
+          return next({
+            status: 400,
+            message: 'Invalid subscription preference.',
+          });
+        }
+
+        user.subscriptionPreference = req.body.preference;
+      }
+
+      if (req.body.recurringEnabled != null) {
+        if (req.body.recurringEnabled) {
+          if (!canConfigureRecurringTransfer(user)) {
+            return next({
+              status: 400,
+              message:
+                'Recurring transfers cannot be enabled for this subscription.',
+            });
+          }
+
+          if (!isValidRecurringDayOfMonth(req.body.recurringDayOfMonth)) {
+            return next({
+              status: 400,
+              message: 'Recurring day of month must be between 1 and 28.',
+            });
+          }
+
+          user.subscriptionRecurringEnabled = true;
+          user.subscriptionRecurringDayOfMonth = req.body.recurringDayOfMonth;
+        } else {
+          user.subscriptionRecurringEnabled = false;
+          user.subscriptionRecurringDayOfMonth = null;
+        }
+      } else if (!canConfigureRecurringTransfer(user)) {
+        user.subscriptionRecurringEnabled = false;
+        user.subscriptionRecurringDayOfMonth = null;
+      }
 
       await userRepository.save(user);
 

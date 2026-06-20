@@ -367,7 +367,8 @@ export type JobId =
   | 'jellyfin-full-scan'
   | 'image-cache-cleanup'
   | 'availability-sync'
-  | 'process-blocklisted-tags';
+  | 'process-blocklisted-tags'
+  | 'subscription-recurring-transfers';
 
 export interface AllSettings {
   clientId: string;
@@ -605,6 +606,9 @@ class Settings {
         },
         'process-blocklisted-tags': {
           schedule: '0 30 1 */7 * *',
+        },
+        'subscription-recurring-transfers': {
+          schedule: '0 0 6 * * *',
         },
       },
       network: {

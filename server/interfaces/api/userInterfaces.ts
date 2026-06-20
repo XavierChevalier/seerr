@@ -66,10 +66,19 @@ export interface SubscriptionGiftResponse {
   reason: string;
 }
 
+export interface RecurringTransferResponse {
+  enabled: boolean;
+  dayOfMonth: number | null;
+  nextDeclarationDate: string | null;
+  amount: number | null;
+  intervalMonths: number | null;
+}
+
 export interface UserSubscriptionResponse {
   pricePerMonth: number | null;
   startDate: string | null;
   preference: string | null;
+  recurringTransfer: RecurringTransferResponse;
   totalPaid: number;
   totalDue: number;
   balance: number;

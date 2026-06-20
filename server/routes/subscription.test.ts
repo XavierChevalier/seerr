@@ -5,6 +5,7 @@ import { getRepository } from '@server/datasource';
 import { SubscriptionGift } from '@server/entity/SubscriptionGift';
 import { SubscriptionPayment } from '@server/entity/SubscriptionPayment';
 import { User } from '@server/entity/User';
+import { processRecurringSubscriptionTransfers } from '@server/job/subscriptionRecurringProcessor';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
@@ -572,6 +573,164 @@ describe('user-declared payments', () => {
       .send({ date: '2024-06-02', amount: 20, method: 'PayPal' });
 
     assert.strictEqual(res.status, 403);
+  });
+});
+
+describe('recurring transfers', () => {
+  let userId: number;
+
+  beforeEach(async () => {
+    userId = await getFriendUserId();
+    await getRepository(SubscriptionPayment)
+      .createQueryBuilder()
+      .delete()
+      .execute();
+    await getRepository(User).update(userId, {
+      subscriptionPricePerMonth: 10,
+      subscriptionStartDate: new Date('2024-01-01'),
+      subscriptionPreference: 'Mensuel',
+      subscriptionRecurringEnabled: false,
+      subscriptionRecurringDayOfMonth: null,
+    });
+  });
+
+  it('lets a user enable recurring transfers on their own account', async () => {
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const res = await agent
+      .patch(`/user/${userId}/subscription/recurring`)
+      .send({ recurringEnabled: true, recurringDayOfMonth: 5 });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.recurringTransfer.enabled, true);
+    assert.strictEqual(res.body.recurringTransfer.dayOfMonth, 5);
+    assert.strictEqual(res.body.recurringTransfer.amount, 10);
+  });
+
+  it('lets a user change their billing preference', async () => {
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const res = await agent
+      .patch(`/user/${userId}/subscription/recurring`)
+      .send({ preference: 'Semestriel' });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.preference, 'Semestriel');
+    assert.strictEqual(res.body.recurringTransfer.amount, 60);
+    assert.strictEqual(res.body.recurringTransfer.intervalMonths, 6);
+  });
+
+  it('returns 400 when user sets an invalid billing preference', async () => {
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const res = await agent
+      .patch(`/user/${userId}/subscription/recurring`)
+      .send({ preference: 'Gratuit' });
+
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.message, 'Invalid subscription preference.');
+  });
+
+  it('lets an admin enable recurring transfers for another user', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+
+    const res = await agent
+      .patch(`/user/${userId}/subscription/recurring`)
+      .send({ recurringEnabled: true, recurringDayOfMonth: 10 });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.recurringTransfer.enabled, true);
+    assert.strictEqual(res.body.recurringTransfer.dayOfMonth, 10);
+  });
+
+  it('returns 403 when user configures recurring for another user', async () => {
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const res = await agent
+      .patch('/user/1/subscription/recurring')
+      .send({ recurringEnabled: true, recurringDayOfMonth: 5 });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('returns 400 when enabling recurring without a valid day', async () => {
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const res = await agent
+      .patch(`/user/${userId}/subscription/recurring`)
+      .send({ recurringEnabled: true, recurringDayOfMonth: 31 });
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('returns 400 when enabling recurring for a free subscription', async () => {
+    await getRepository(User).update(userId, {
+      subscriptionPreference: 'Gratuit',
+      subscriptionPricePerMonth: 0,
+    });
+
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await agent
+      .patch(`/user/${userId}/subscription/recurring`)
+      .send({ recurringEnabled: true, recurringDayOfMonth: 5 });
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('disables recurring when admin switches preference to Gratuit', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+
+    await agent
+      .patch(`/user/${userId}/subscription/recurring`)
+      .send({ recurringEnabled: true, recurringDayOfMonth: 5 });
+
+    const res = await agent.put(`/user/${userId}/subscription`).send({
+      pricePerMonth: 0,
+      startDate: '2024-01-01',
+      preference: 'Gratuit',
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.recurringTransfer.enabled, false);
+    assert.strictEqual(res.body.recurringTransfer.dayOfMonth, null);
+  });
+
+  it('creates a pending payment on declaration day via scheduled processor', async () => {
+    await getRepository(User).update(userId, {
+      subscriptionRecurringEnabled: true,
+      subscriptionRecurringDayOfMonth: 5,
+    });
+
+    const created = await processRecurringSubscriptionTransfers(
+      new Date('2024-03-05')
+    );
+
+    assert.strictEqual(created, 1);
+
+    const payments = await getRepository(SubscriptionPayment).find({
+      where: { user: { id: userId } },
+    });
+
+    assert.strictEqual(payments.length, 1);
+    assert.strictEqual(payments[0].status, 'pending');
+    assert.strictEqual(payments[0].method, 'Virement SEPA');
+    assert.strictEqual(Number(payments[0].amount), 10);
+  });
+
+  it('does not create duplicate pending payments for the same period', async () => {
+    await getRepository(User).update(userId, {
+      subscriptionRecurringEnabled: true,
+      subscriptionRecurringDayOfMonth: 5,
+    });
+
+    assert.strictEqual(
+      await processRecurringSubscriptionTransfers(new Date('2024-03-05')),
+      1
+    );
+    assert.strictEqual(
+      await processRecurringSubscriptionTransfers(new Date('2024-03-05')),
+      0
+    );
   });
 });
 

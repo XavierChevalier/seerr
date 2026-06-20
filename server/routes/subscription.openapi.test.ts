@@ -12,6 +12,7 @@ describe('subscription OpenAPI spec', () => {
 
   it('declares user subscription endpoints required by express-openapi-validator', () => {
     assert.ok(spec.paths['/user/{userId}/subscription']);
+    assert.ok(spec.paths['/user/{userId}/subscription/recurring']);
     assert.ok(spec.paths['/user/{userId}/subscription/payment']);
     assert.ok(spec.paths['/user/{userId}/subscription/payment/{paymentId}']);
     assert.ok(
@@ -30,6 +31,7 @@ describe('subscription OpenAPI spec', () => {
 
   it('declares subscription response schemas', () => {
     assert.ok(spec.components.schemas.UserSubscription);
+    assert.ok(spec.components.schemas.RecurringTransfer);
     assert.ok(spec.components.schemas.SubscriptionOverviewItem);
     assert.ok(spec.components.schemas.SubscriptionPaymentListItem);
     assert.ok(spec.components.schemas.SubscriptionStatusResponse);

@@ -6,14 +6,25 @@ import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
+import type { User } from '@server/entity/User';
 import type {
   SubscriptionPaymentStatus,
   UserSubscriptionResponse,
 } from '@server/interfaces/api/userInterfaces';
-import { SUBSCRIPTION_PAYMENT_METHODS } from '@server/utils/subscriptionHelpers';
+import {
+  SUBSCRIPTION_PAYMENT_METHODS,
+  SUBSCRIPTION_PREFERENCE_INTERVALS,
+  getNextRecurringDeclarationDate,
+} from '@server/utils/subscriptionHelpers';
 import axios from 'axios';
 import { useRouter } from 'next/router';
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react';
 import { useIntl, type IntlShape } from 'react-intl';
 import useSWR from 'swr';
 
@@ -102,14 +113,61 @@ const messages = defineMessages(
     balanceHintEven: 'Account up to date',
     subscriptionRate: '{amount}/month',
     subscriptionMemberSince: 'Member since {date}',
+    recurringTransferTitle: 'Automatic Transfer',
+    recurringTransferDescription:
+      'Enable automatic transfer declarations based on your billing preference. A pending payment will be created on each due date and must be confirmed by an administrator.',
+    recurringTransferEnabled: 'Enable automatic transfer',
+    recurringTransferDayOfMonth: 'Day of month',
+    recurringTransferSummary:
+      'SEPA transfer of {amount} every {months, plural, one {# month} other {# months}}, on day {day} of each billing period.',
+    recurringTransferNextDeclaration: 'Next automatic declaration: {date}',
+    recurringTransferSave: 'Save automatic transfer settings',
+    toastRecurringSuccess: 'Automatic transfer settings saved successfully!',
+    toastRecurringFailure:
+      'Something went wrong while saving automatic transfer settings.',
   }
 );
 
 const formatCurrency = (amount: number) =>
-  `€${amount.toLocaleString('fr-FR', {
+  new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  }).format(amount);
+
+const mapRecurringSettings = (subscription: UserSubscriptionResponse) => ({
+  enabled: subscription.recurringTransfer.enabled,
+  dayOfMonth: subscription.recurringTransfer.dayOfMonth
+    ? String(subscription.recurringTransfer.dayOfMonth)
+    : '1',
+  preference: subscription.preference ?? 'Mensuel',
+});
+
+const buildRecurringPreviewUser = (
+  subscription: UserSubscriptionResponse,
+  recurringSettings: ReturnType<typeof mapRecurringSettings>
+): User =>
+  ({
+    subscriptionPreference: recurringSettings.preference,
+    subscriptionRecurringEnabled: recurringSettings.enabled,
+    subscriptionRecurringDayOfMonth: Number(recurringSettings.dayOfMonth),
+    subscriptionStartDate: subscription.startDate
+      ? new Date(subscription.startDate)
+      : null,
+    subscriptionPricePerMonth: subscription.pricePerMonth,
+    subscriptionPayments: subscription.payments.map(
+      (payment: UserSubscriptionResponse['payments'][number]) => ({
+        id: payment.id,
+        date: new Date(payment.date),
+        amount: payment.amount,
+        method: payment.method,
+        status: payment.status,
+        rejectionReason: payment.rejectionReason,
+        createdByUserId: payment.createdByUserId,
+      })
+    ),
+  }) as User;
 
 interface CurrencyAmountInputProps {
   name?: string;
@@ -266,6 +324,12 @@ const UserSubscriptionSettings = () => {
     startDate: '',
     preference: 'Mensuel',
   });
+  const [recurringSettings, setRecurringSettings] = useState({
+    enabled: false,
+    dayOfMonth: '1',
+    preference: 'Mensuel',
+  });
+  const [isSavingRecurring, setIsSavingRecurring] = useState(false);
   const [paymentFormAmount, setPaymentFormAmount] = useState('');
 
   useEffect(() => {
@@ -278,6 +342,31 @@ const UserSubscriptionSettings = () => {
       });
     }
   }, [data]);
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    setRecurringSettings(mapRecurringSettings(data));
+    // Only resync when server-side recurring settings change, not on every SWR refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    user?.id,
+    data?.preference,
+    data?.recurringTransfer?.enabled,
+    data?.recurringTransfer?.dayOfMonth,
+  ]);
+
+  const previewNextDeclarationDate = useMemo(() => {
+    if (!data || !recurringSettings.enabled || !data.startDate) {
+      return null;
+    }
+
+    return getNextRecurringDeclarationDate(
+      buildRecurringPreviewUser(data, recurringSettings)
+    );
+  }, [data, recurringSettings]);
 
   if (!data && !error) {
     return <LoadingSpinner />;
@@ -327,6 +416,45 @@ const UserSubscriptionSettings = () => {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const saveRecurringSettings = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSavingRecurring(true);
+    try {
+      const payload: {
+        recurringEnabled: boolean;
+        recurringDayOfMonth: number | null;
+        preference?: string;
+      } = {
+        recurringEnabled: recurringSettings.enabled,
+        recurringDayOfMonth: recurringSettings.enabled
+          ? Number(recurringSettings.dayOfMonth)
+          : null,
+      };
+
+      if (recurringSettings.enabled) {
+        payload.preference = recurringSettings.preference;
+      }
+
+      const { data: updated } = await axios.patch<UserSubscriptionResponse>(
+        `/api/v1/user/${user.id}/subscription/recurring`,
+        payload
+      );
+      setRecurringSettings(mapRecurringSettings(updated));
+      await mutate(updated, { revalidate: false });
+      addToast(intl.formatMessage(messages.toastRecurringSuccess), {
+        autoDismiss: true,
+        appearance: 'success',
+      });
+    } catch {
+      addToast(intl.formatMessage(messages.toastRecurringFailure), {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    } finally {
+      setIsSavingRecurring(false);
     }
   };
 
@@ -489,6 +617,19 @@ const UserSubscriptionSettings = () => {
   const showBaseConfig = isAdmin && !isOwnProfile;
   const showGiftSection = isAdmin && !isOwnProfile;
   const showDeclareForm = isOwnProfile || isAdmin;
+  const showRecurringSection =
+    isConfigured &&
+    data.preference !== 'Gratuit' &&
+    data.recurringTransfer.amount != null &&
+    (isOwnProfile || isAdmin);
+  const selectedPreferenceInterval =
+    SUBSCRIPTION_PREFERENCE_INTERVALS[
+      recurringSettings.preference as keyof typeof SUBSCRIPTION_PREFERENCE_INTERVALS
+    ] ?? null;
+  const previewRecurringAmount =
+    data.pricePerMonth != null && selectedPreferenceInterval != null
+      ? data.pricePerMonth * selectedPreferenceInterval
+      : null;
   const isStandalonePage = router.pathname === '/subscription';
   const isActive = data.status === 'Actif';
   const monthsBehind = Math.max(
@@ -501,6 +642,8 @@ const UserSubscriptionSettings = () => {
       : data.balance < 0
         ? 'text-red-400'
         : 'text-white';
+  const balanceDisplayAmount =
+    data.balance < 0 ? Math.abs(data.balance) : data.balance;
   const balanceHint =
     data.balance > 0
       ? intl.formatMessage(messages.balanceHintCredit)
@@ -551,7 +694,7 @@ const UserSubscriptionSettings = () => {
                 {intl.formatMessage(messages.planDetails)}
               </p>
               {data.pricePerMonth != null && (
-                <p className="mt-2 text-lg font-bold text-white">
+                <p className="mt-2 text-2xl font-bold text-white">
                   {intl.formatMessage(messages.subscriptionRate, {
                     amount: formatCurrency(data.pricePerMonth),
                   })}
@@ -580,7 +723,7 @@ const UserSubscriptionSettings = () => {
                 {intl.formatMessage(messages.balance)}
               </p>
               <p className={`mt-2 text-2xl font-bold ${balanceClassName}`}>
-                {formatCurrency(data.balance)}
+                {formatCurrency(balanceDisplayAmount)}
               </p>
               <p className="mt-1 text-xs text-gray-400">{balanceHint}</p>
             </div>
@@ -655,6 +798,125 @@ const UserSubscriptionSettings = () => {
           </div>
           <Button buttonType="primary" className="mt-4" disabled={isSaving}>
             {intl.formatMessage(messages.saveSettings)}
+          </Button>
+        </form>
+      )}
+
+      {showRecurringSection && (
+        <form
+          onSubmit={saveRecurringSettings}
+          className="mb-8 rounded-lg bg-gray-800 p-4"
+        >
+          <h4 className="mb-1 text-lg font-bold text-gray-100">
+            {intl.formatMessage(messages.recurringTransferTitle)}
+          </h4>
+          <p className="description mb-4 max-w-none">
+            {intl.formatMessage(messages.recurringTransferDescription)}
+          </p>
+
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={recurringSettings.enabled}
+              onChange={(e) =>
+                setRecurringSettings({
+                  ...recurringSettings,
+                  enabled: e.target.checked,
+                })
+              }
+            />
+            <span>{intl.formatMessage(messages.recurringTransferEnabled)}</span>
+          </label>
+
+          {recurringSettings.enabled && (
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:max-w-md sm:grid-cols-2">
+              {isOwnProfile && (
+                <div>
+                  <label className="text-label">
+                    {intl.formatMessage(messages.preference)}
+                  </label>
+                  <div className="form-input-field mt-1">
+                    <select
+                      value={recurringSettings.preference}
+                      onChange={(e) =>
+                        setRecurringSettings({
+                          ...recurringSettings,
+                          preference: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="Mensuel">
+                        {intl.formatMessage(messages.preferenceMensuel)}
+                      </option>
+                      <option value="Semestriel">
+                        {intl.formatMessage(messages.preferenceSemestriel)}
+                      </option>
+                      <option value="Annuel">
+                        {intl.formatMessage(messages.preferenceAnnuel)}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="text-label">
+                  {intl.formatMessage(messages.recurringTransferDayOfMonth)}
+                </label>
+                <div className="form-input-field mt-1">
+                  <select
+                    value={recurringSettings.dayOfMonth}
+                    onChange={(e) =>
+                      setRecurringSettings({
+                        ...recurringSettings,
+                        dayOfMonth: e.target.value,
+                      })
+                    }
+                  >
+                    {Array.from({ length: 28 }, (_, index) => {
+                      const day = String(index + 1);
+                      return (
+                        <option key={day} value={day}>
+                          {day}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {recurringSettings.enabled && previewRecurringAmount != null && (
+            <div className="mt-4 space-y-2 text-sm text-gray-300">
+              <p>
+                {intl.formatMessage(messages.recurringTransferSummary, {
+                  amount: formatCurrency(previewRecurringAmount),
+                  months: selectedPreferenceInterval ?? 1,
+                  day: recurringSettings.dayOfMonth,
+                })}
+              </p>
+              {previewNextDeclarationDate && (
+                <p className="text-gray-400">
+                  {intl.formatMessage(
+                    messages.recurringTransferNextDeclaration,
+                    {
+                      date: formatSubscriptionDate(
+                        intl,
+                        previewNextDeclarationDate
+                      ),
+                    }
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+
+          <Button
+            buttonType="primary"
+            className="mt-4"
+            disabled={isSavingRecurring}
+          >
+            {intl.formatMessage(messages.recurringTransferSave)}
           </Button>
         </form>
       )}

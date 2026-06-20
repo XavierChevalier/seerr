@@ -160,6 +160,12 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   public subscriptionPreference?: string | null;
 
+  @Column({ type: 'boolean', default: false })
+  public subscriptionRecurringEnabled: boolean;
+
+  @Column({ type: 'integer', nullable: true })
+  public subscriptionRecurringDayOfMonth?: number | null;
+
   @OneToOne(() => UserSettings, (settings) => settings.user, {
     cascade: true,
     eager: true,

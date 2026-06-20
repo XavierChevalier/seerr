@@ -1,5 +1,6 @@
 import { MediaServerType } from '@server/constants/server';
 import blocklistedTagsProcessor from '@server/job/blocklistedTagsProcessor';
+import subscriptionRecurringProcessor from '@server/job/subscriptionRecurringProcessor';
 import availabilitySync from '@server/lib/availabilitySync';
 import downloadTracker from '@server/lib/downloadtracker';
 import ImageProxy from '@server/lib/imageproxy';
@@ -257,6 +258,26 @@ export const startJobs = (): void => {
     }),
     running: () => blocklistedTagsProcessor.status().running,
     cancelFn: () => blocklistedTagsProcessor.cancel(),
+  });
+
+  scheduledJobs.push({
+    id: 'subscription-recurring-transfers',
+    name: 'Subscription Recurring Transfers',
+    type: 'command',
+    interval: 'hours',
+    cronSchedule: jobs['subscription-recurring-transfers'].schedule,
+    job: schedule.scheduleJob(
+      jobs['subscription-recurring-transfers'].schedule,
+      () => {
+        logger.info(
+          'Starting scheduled job: Subscription Recurring Transfers',
+          {
+            label: 'Jobs',
+          }
+        );
+        subscriptionRecurringProcessor.run();
+      }
+    ),
   });
 
   logger.info('Scheduled jobs loaded', { label: 'Jobs' });

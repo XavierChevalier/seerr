@@ -7,6 +7,13 @@ import { User } from '@server/entity/User';
 import {
   calculateSubscriptionMissingTotal,
   calculateSubscriptionState,
+  getNextRecurringDeclarationDate,
+  getRecurringTransferAmount,
+  hasRecurringPaymentForPeriod,
+  isRecurringDeclarationDay,
+  isValidSubscriptionPreference,
+  isValidUserSubscriptionPreference,
+  shouldCreateRecurringPayment,
 } from '@server/utils/subscriptionHelpers';
 
 function createUser(overrides: Partial<User> = {}): User {
@@ -15,6 +22,8 @@ function createUser(overrides: Partial<User> = {}): User {
   user.subscriptionPricePerMonth = 10;
   user.subscriptionStartDate = new Date('2024-01-01');
   user.subscriptionPreference = 'Mensuel';
+  user.subscriptionRecurringEnabled = false;
+  user.subscriptionRecurringDayOfMonth = null;
   user.subscriptionPayments = [];
   user.subscriptionGifts = [];
   Object.assign(user, overrides);
@@ -38,6 +47,9 @@ describe('calculateSubscriptionState', () => {
     assert.strictEqual(state.status, 'Inactif');
     assert.deepStrictEqual(state.payments, []);
     assert.deepStrictEqual(state.gifts, []);
+    assert.strictEqual(state.recurringTransfer.enabled, false);
+    assert.strictEqual(state.recurringTransfer.amount, 10);
+    assert.strictEqual(state.recurringTransfer.intervalMonths, 1);
   });
 
   it('calculates remaining months from payments and gifted months', () => {
@@ -137,6 +149,7 @@ describe('calculateSubscriptionState', () => {
     assert.strictEqual(state.balance, 0);
     assert.strictEqual(state.remainingMonths, 0);
     assert.strictEqual(state.status, 'Actif');
+    assert.strictEqual(state.recurringTransfer.amount, null);
   });
 
   it('includes pending payments in totalPaid', () => {
@@ -156,6 +169,131 @@ describe('calculateSubscriptionState', () => {
     const state = calculateSubscriptionState(user);
     assert.strictEqual(state.totalPaid, 20);
     assert.strictEqual(state.payments[0].status, 'pending');
+  });
+});
+
+describe('recurring transfer helpers', () => {
+  it('calculates recurring amount from preference', () => {
+    const monthly = createUser({ subscriptionPreference: 'Mensuel' });
+    const semiannual = createUser({ subscriptionPreference: 'Semestriel' });
+    const annual = createUser({ subscriptionPreference: 'Annuel' });
+
+    assert.strictEqual(getRecurringTransferAmount(monthly), 10);
+    assert.strictEqual(getRecurringTransferAmount(semiannual), 60);
+    assert.strictEqual(getRecurringTransferAmount(annual), 120);
+  });
+
+  it('validates user-selectable subscription preferences', () => {
+    assert.strictEqual(isValidUserSubscriptionPreference('Mensuel'), true);
+    assert.strictEqual(isValidUserSubscriptionPreference('Semestriel'), true);
+    assert.strictEqual(isValidUserSubscriptionPreference('Annuel'), true);
+    assert.strictEqual(isValidUserSubscriptionPreference('Gratuit'), false);
+    assert.strictEqual(isValidSubscriptionPreference('Gratuit'), true);
+  });
+
+  it('detects declaration days based on preference interval', () => {
+    const monthly = createUser({
+      subscriptionRecurringEnabled: true,
+      subscriptionRecurringDayOfMonth: 5,
+      subscriptionPreference: 'Mensuel',
+    });
+    const semiannual = createUser({
+      subscriptionRecurringEnabled: true,
+      subscriptionRecurringDayOfMonth: 5,
+      subscriptionPreference: 'Semestriel',
+    });
+
+    assert.strictEqual(
+      isRecurringDeclarationDay(monthly, new Date('2024-03-05')),
+      true
+    );
+    assert.strictEqual(
+      isRecurringDeclarationDay(monthly, new Date('2024-03-06')),
+      false
+    );
+    assert.strictEqual(
+      isRecurringDeclarationDay(semiannual, new Date('2024-01-05')),
+      true
+    );
+    assert.strictEqual(
+      isRecurringDeclarationDay(semiannual, new Date('2024-02-05')),
+      false
+    );
+    assert.strictEqual(
+      isRecurringDeclarationDay(semiannual, new Date('2024-07-05')),
+      true
+    );
+  });
+
+  it('skips declaration before subscription start date', () => {
+    const user = createUser({
+      subscriptionStartDate: new Date('2024-01-15'),
+      subscriptionRecurringEnabled: true,
+      subscriptionRecurringDayOfMonth: 5,
+    });
+
+    assert.strictEqual(
+      isRecurringDeclarationDay(user, new Date('2024-01-05')),
+      false
+    );
+  });
+
+  it('avoids duplicate declarations for the same billing period', () => {
+    const pending = new SubscriptionPayment();
+    pending.id = 1;
+    pending.date = new Date('2024-03-05');
+    pending.amount = 10;
+    pending.method = 'Virement SEPA';
+    pending.status = 'pending';
+    pending.createdByUserId = 2;
+
+    const user = createUser({
+      subscriptionRecurringEnabled: true,
+      subscriptionRecurringDayOfMonth: 5,
+      subscriptionPayments: [pending],
+    });
+
+    assert.strictEqual(
+      hasRecurringPaymentForPeriod(user, new Date('2024-03-05')),
+      true
+    );
+    assert.strictEqual(
+      shouldCreateRecurringPayment(user, new Date('2024-03-05')),
+      false
+    );
+  });
+
+  it('ignores rejected payments when checking for duplicates', () => {
+    const rejected = new SubscriptionPayment();
+    rejected.id = 1;
+    rejected.date = new Date('2024-03-05');
+    rejected.amount = 10;
+    rejected.method = 'Virement SEPA';
+    rejected.status = 'rejected';
+    rejected.createdByUserId = 2;
+
+    const user = createUser({
+      subscriptionRecurringEnabled: true,
+      subscriptionRecurringDayOfMonth: 5,
+      subscriptionPayments: [rejected],
+    });
+
+    assert.strictEqual(
+      shouldCreateRecurringPayment(user, new Date('2024-03-05')),
+      true
+    );
+  });
+
+  it('returns the next declaration date when recurring is enabled', () => {
+    const user = createUser({
+      subscriptionRecurringEnabled: true,
+      subscriptionRecurringDayOfMonth: 5,
+    });
+
+    assert.strictEqual(
+      getNextRecurringDeclarationDate(user, new Date('2024-03-01')),
+      '2024-03-05'
+    );
   });
 });
 

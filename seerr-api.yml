@@ -2061,6 +2061,26 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SubscriptionGift'
+        recurringTransfer:
+          $ref: '#/components/schemas/RecurringTransfer'
+    RecurringTransfer:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        dayOfMonth:
+          type: integer
+          nullable: true
+        nextDeclarationDate:
+          type: string
+          format: date
+          nullable: true
+        amount:
+          type: number
+          nullable: true
+        intervalMonths:
+          type: integer
+          nullable: true
     SubscriptionOverviewItem:
       type: object
       properties:
@@ -5535,6 +5555,45 @@ paths:
                 preference:
                   type: string
                   nullable: true
+      responses:
+        '200':
+          description: Updated user subscription returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubscription'
+  /user/{userId}/subscription/recurring:
+    patch:
+      summary: Update user recurring transfer settings
+      description: Updates recurring transfer settings and billing preference for a user. Users can update their own subscription; admins can update any user.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                preference:
+                  type: string
+                  enum:
+                    - Mensuel
+                    - Semestriel
+                    - Annuel
+                recurringEnabled:
+                  type: boolean
+                recurringDayOfMonth:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 28
       responses:
         '200':
           description: Updated user subscription returned
