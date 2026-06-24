@@ -70,6 +70,7 @@ process.env.TS_NODE_FILES = 'true';
 
 const stream = run({
   files,
+  concurrency: 1,
   execArgv: [
     '--experimental-test-module-mocks',
     '-r',
