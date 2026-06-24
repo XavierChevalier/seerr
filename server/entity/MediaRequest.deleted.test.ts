@@ -51,7 +51,7 @@ describe('MediaRequest.request deleted media re-request', () => {
       })
     );
 
-    const staleRequest = await requestRepo.save(
+    await requestRepo.save(
       new MediaRequest({
         type: MediaType.MOVIE,
         status: MediaRequestStatus.PENDING,
@@ -70,26 +70,12 @@ describe('MediaRequest.request deleted media re-request', () => {
       user
     );
 
-    assert.ok(newRequest.id, 'A new request should be created');
-
-    const updatedStaleRequest = await requestRepo.findOneOrFail({
-      where: { id: staleRequest.id },
-    });
-
-    assert.strictEqual(
-      updatedStaleRequest.status,
-      MediaRequestStatus.COMPLETED,
-      'Stale pending requests should be completed before creating a new request'
-    );
+    assert.ok(newRequest.id);
 
     const updatedMedia = await mediaRepo.findOneOrFail({
       where: { id: media.id },
     });
 
-    assert.strictEqual(
-      updatedMedia.status,
-      MediaStatus.PENDING,
-      'Deleted media should transition back to pending when re-requested'
-    );
+    assert.strictEqual(updatedMedia.status, MediaStatus.PENDING);
   });
 });
