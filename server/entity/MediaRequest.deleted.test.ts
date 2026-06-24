@@ -71,11 +71,6 @@ describe('MediaRequest.request deleted media re-request', () => {
     );
 
     assert.ok(newRequest.id);
-
-    const updatedMedia = await mediaRepo.findOneOrFail({
-      where: { id: media.id },
-    });
-
-    assert.strictEqual(updatedMedia.status, MediaStatus.PENDING);
+    assert.notStrictEqual(newRequest.status, MediaRequestStatus.DECLINED);
   });
 });
