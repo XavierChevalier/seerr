@@ -144,6 +144,9 @@ export class MediaRequest {
         ? await tmdb.getMovie({ movieId: requestBody.mediaId })
         : await tmdb.getTvShow({ tvId: requestBody.mediaId });
 
+    const statusKey = requestBody.is4k ? 'status4k' : 'status';
+    let wasDeleted = false;
+
     let media = await mediaRepository.findOne({
       where: {
         tmdbId: requestBody.mediaId,
@@ -161,6 +164,8 @@ export class MediaRequest {
         mediaType: requestBody.mediaType,
       });
     } else {
+      wasDeleted = media[statusKey] === MediaStatus.DELETED;
+
       if (media.status === MediaStatus.BLOCKLISTED) {
         logger.warn('Request for media blocked due to being blocklisted', {
           tmdbId: tmdbMedia.id,
@@ -200,6 +205,19 @@ export class MediaRequest {
       .getMany();
 
     if (existing && existing.length > 0) {
+      if (wasDeleted) {
+        const staleRequests = existing.filter(
+          (request) =>
+            request.status !== MediaRequestStatus.DECLINED &&
+            request.status !== MediaRequestStatus.COMPLETED
+        );
+
+        for (const staleRequest of staleRequests) {
+          staleRequest.status = MediaRequestStatus.COMPLETED;
+          await requestRepository.save(staleRequest);
+        }
+      }
+
       // If there is an existing movie request that isn't declined, don't allow a new one.
       if (
         requestBody.mediaType === MediaType.MOVIE &&
@@ -220,7 +238,6 @@ export class MediaRequest {
 
       // If an existing auto-request for this media exists from the same user,
       // don't allow a new one.
-      const statusKey = requestBody.is4k ? 'status4k' : 'status';
       if (
         existing.find(
           (r) =>
@@ -447,7 +464,7 @@ export class MediaRequest {
       }
 
       // We should also check seasons that are available/partially available but don't have existing requests
-      if (media.seasons) {
+      if (media.seasons && !wasDeleted) {
         existingSeasons = [
           ...existingSeasons,
           ...media.seasons
