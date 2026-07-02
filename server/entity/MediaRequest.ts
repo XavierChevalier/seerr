@@ -144,6 +144,9 @@ export class MediaRequest {
         ? await tmdb.getMovie({ movieId: requestBody.mediaId })
         : await tmdb.getTvShow({ tvId: requestBody.mediaId });
 
+    const statusKey = requestBody.is4k ? 'status4k' : 'status';
+    let wasDeleted = false;
+
     let media = await mediaRepository.findOne({
       where: {
         tmdbId: requestBody.mediaId,
@@ -161,6 +164,8 @@ export class MediaRequest {
         mediaType: requestBody.mediaType,
       });
     } else {
+      wasDeleted = media[statusKey] === MediaStatus.DELETED;
+
       if (media.status === MediaStatus.BLOCKLISTED) {
         logger.warn('Request for media blocked due to being blocklisted', {
           tmdbId: tmdbMedia.id,
@@ -203,6 +208,7 @@ export class MediaRequest {
       // If there is an existing movie request that isn't declined, don't allow a new one.
       if (
         requestBody.mediaType === MediaType.MOVIE &&
+        !wasDeleted &&
         existing[0].status !== MediaRequestStatus.DECLINED &&
         existing[0].status !== MediaRequestStatus.COMPLETED
       ) {
@@ -220,7 +226,6 @@ export class MediaRequest {
 
       // If an existing auto-request for this media exists from the same user,
       // don't allow a new one.
-      const statusKey = requestBody.is4k ? 'status4k' : 'status';
       if (
         existing.find(
           (r) =>
@@ -429,7 +434,7 @@ export class MediaRequest {
       // We need to check existing requests on this title to make sure we don't double up on seasons that were
       // already requested. In the case they were, we just throw out any duplicates but still approve the request.
       // (Unless there are no seasons, in which case we abort)
-      if (media.requests) {
+      if (media.requests && !wasDeleted) {
         existingSeasons = media.requests
           .filter(
             (request) =>
@@ -447,7 +452,7 @@ export class MediaRequest {
       }
 
       // We should also check seasons that are available/partially available but don't have existing requests
-      if (media.seasons) {
+      if (media.seasons && !wasDeleted) {
         existingSeasons = [
           ...existingSeasons,
           ...media.seasons

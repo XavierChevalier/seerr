@@ -10,7 +10,9 @@ export const getGithubRepo = (): string => {
 
   try {
     const packageJsonPath = path.join(__dirname, '../../package.json');
-    const { repository } = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+    const { repository } = JSON.parse(
+      readFileSync(packageJsonPath, 'utf8')
+    ) as {
       repository?: { url?: string };
     };
     const url = repository?.url ?? '';

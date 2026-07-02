@@ -271,7 +271,7 @@ const RequestButton = ({
   if (
     (!media ||
       media.status === MediaStatus.UNKNOWN ||
-      (media.status === MediaStatus.DELETED && !activeRequest)) &&
+      media.status === MediaStatus.DELETED) &&
     hasPermission(
       [
         Permission.REQUEST,
@@ -316,7 +316,7 @@ const RequestButton = ({
   if (
     (!media ||
       media.status4k === MediaStatus.UNKNOWN ||
-      (media.status4k === MediaStatus.DELETED && !active4kRequest)) &&
+      media.status4k === MediaStatus.DELETED) &&
     hasPermission(
       [
         Permission.REQUEST_4K,
