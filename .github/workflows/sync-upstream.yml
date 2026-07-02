@@ -11,6 +11,7 @@ on:
 permissions:
   contents: write
   issues: write
+  actions: write
 
 concurrency:
   group: sync-upstream-develop
@@ -38,8 +39,14 @@ jobs:
           git remote add upstream https://github.com/seerr-team/seerr.git
           git fetch upstream develop
 
+          before="$(git rev-parse HEAD)"
           if git merge upstream/develop --no-edit -m "chore(sync): merge upstream develop from seerr-team/seerr"; then
-            echo "status=merged" >> "$GITHUB_OUTPUT"
+            after="$(git rev-parse HEAD)"
+            if [ "$before" = "$after" ]; then
+              echo "status=up_to_date" >> "$GITHUB_OUTPUT"
+            else
+              echo "status=merged" >> "$GITHUB_OUTPUT"
+            fi
           else
             git merge --abort
             echo "status=conflict" >> "$GITHUB_OUTPUT"
@@ -49,6 +56,18 @@ jobs:
       - name: Push develop
         if: steps.merge.outputs.status == 'merged'
         run: git push origin develop
+
+      - name: Trigger image rebuild
+        if: steps.merge.outputs.status == 'merged'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci.yml',
+              ref: 'develop',
+            });
 
       - name: Open issue on merge conflict
         if: failure() && steps.merge.outputs.status == 'conflict'
