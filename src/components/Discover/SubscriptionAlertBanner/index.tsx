@@ -24,6 +24,9 @@ const SubscriptionAlertBanner = () => {
   }
 
   const monthsBehind = Math.abs(Math.ceil(data.remainingMonths ?? 0));
+  if (monthsBehind <= 1) {
+    return null;
+  }
 
   return (
     <div className="mb-6">
