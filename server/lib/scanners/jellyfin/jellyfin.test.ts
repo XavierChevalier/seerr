@@ -18,6 +18,7 @@ import { User } from '@server/entity/User';
 import type { Library } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
+import { runWithMockTimers } from '@server/test/runWithMockTimers';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
@@ -91,6 +92,15 @@ let getTvShowImpl: (args: {
 }) => Promise<TmdbTvDetails> = async () => fakeTmdbShow(1);
 
 Object.defineProperty(TheMovieDb.prototype, 'getTvShow', {
+  get() {
+    return async (args: { tvId: number; language?: string }) =>
+      getTvShowImpl(args);
+  },
+  set() {},
+  configurable: true,
+});
+
+Object.defineProperty(TheMovieDb.prototype, 'getTvShowForScan', {
   get() {
     return async (args: { tvId: number; language?: string }) =>
       getTvShowImpl(args);
@@ -333,7 +343,7 @@ describe('Jellyfin Scanner', () => {
         return [];
       };
 
-      await jellyfinFullScanner.run();
+      await runWithMockTimers(() => jellyfinFullScanner.run());
 
       const updated = await mediaRepository.findOneOrFail({
         where: { tmdbId: 5000 },
@@ -411,7 +421,7 @@ describe('Jellyfin Scanner', () => {
         return [];
       };
 
-      await jellyfinFullScanner.run();
+      await runWithMockTimers(() => jellyfinFullScanner.run());
 
       const updated = await mediaRepository.findOneOrFail({
         where: { tmdbId: 5001 },
@@ -488,7 +498,7 @@ describe('Jellyfin Scanner', () => {
         return [];
       };
 
-      await jellyfinFullScanner.run();
+      await runWithMockTimers(() => jellyfinFullScanner.run());
 
       const updated = await mediaRepository.findOneOrFail({
         where: { tmdbId: 5002 },
