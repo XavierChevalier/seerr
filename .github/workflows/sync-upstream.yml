@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   sync:
-    name: Merge seerr-team/seerr develop
+    name: Rebase onto seerr-team/seerr develop
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout develop
@@ -28,8 +28,8 @@ jobs:
           ref: develop
           fetch-depth: 0
 
-      - name: Merge upstream develop
-        id: merge
+      - name: Rebase onto upstream develop
+        id: sync
         run: |
           set -euo pipefail
 
@@ -40,25 +40,30 @@ jobs:
           git fetch upstream develop
 
           before="$(git rev-parse HEAD)"
-          if git merge upstream/develop --no-edit -m "chore(sync): merge upstream develop from seerr-team/seerr"; then
+          if git merge-base --is-ancestor upstream/develop HEAD; then
+            echo "status=up_to_date" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git rebase upstream/develop; then
             after="$(git rev-parse HEAD)"
             if [ "$before" = "$after" ]; then
               echo "status=up_to_date" >> "$GITHUB_OUTPUT"
             else
-              echo "status=merged" >> "$GITHUB_OUTPUT"
+              echo "status=rebased" >> "$GITHUB_OUTPUT"
             fi
           else
-            git merge --abort
+            git rebase --abort
             echo "status=conflict" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
       - name: Push develop
-        if: steps.merge.outputs.status == 'merged'
-        run: git push origin develop
+        if: steps.sync.outputs.status == 'rebased'
+        run: git push --force-with-lease origin develop
 
       - name: Trigger image rebuild
-        if: steps.merge.outputs.status == 'merged'
+        if: steps.sync.outputs.status == 'rebased'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
@@ -69,25 +74,25 @@ jobs:
               ref: 'develop',
             });
 
-      - name: Open issue on merge conflict
-        if: failure() && steps.merge.outputs.status == 'conflict'
+      - name: Open issue on rebase conflict
+        if: failure() && steps.sync.outputs.status == 'conflict'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const title = 'Upstream sync conflict on develop';
             const body = [
-              'Automatic merge of `seerr-team/seerr@develop` into this fork failed due to conflicts.',
+              'Automatic rebase of this fork onto `seerr-team/seerr@develop` failed due to conflicts.',
               '',
-              'Resolve locally:',
+              'Resolve locally (no merge commit):',
               '```bash',
               'git fetch origin develop',
               'git checkout develop',
-              'git pull origin develop',
+              'git pull --ff-only origin develop',
               'git remote add upstream https://github.com/seerr-team/seerr.git',
               'git fetch upstream develop',
-              'git merge upstream/develop',
+              'git rebase upstream/develop',
               '# resolve conflicts, then:',
-              'git push origin develop',
+              'git push --force-with-lease origin develop',
               '```',
               '',
               `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
