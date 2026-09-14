@@ -1,7 +1,8 @@
----
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Sync upstream develop
 
+# Rebase onto seerr-team/seerr@develop, open a PR (tests run), auto-merge when green.
+# Never force-push develop directly: a broken sync must not publish :develop.
 on:
   schedule:
     # Daily at 06:00 UTC
@@ -11,11 +12,15 @@ on:
 permissions:
   contents: write
   issues: write
-  actions: write
+  pull-requests: write
 
 concurrency:
   group: sync-upstream-develop
   cancel-in-progress: false
+
+env:
+  SYNC_BRANCH: chore/sync-upstream
+  SYNC_PR_TITLE: 'chore(sync): upstream develop'
 
 jobs:
   sync:
@@ -53,26 +58,60 @@ jobs:
               echo "status=rebased" >> "$GITHUB_OUTPUT"
             fi
           else
-            git rebase --abort
+            git rebase --abort || true
             echo "status=conflict" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
-      - name: Push develop
+      - name: Push sync branch
         if: steps.sync.outputs.status == 'rebased'
-        run: git push --force-with-lease origin develop
+        run: |
+          set -euo pipefail
+          git push --force-with-lease origin "HEAD:refs/heads/${SYNC_BRANCH}"
 
-      - name: Trigger image rebuild
+      - name: Open or update PR and enable auto-merge
         if: steps.sync.outputs.status == 'rebased'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'ci.yml',
-              ref: 'develop',
-            });
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          body="$(cat <<EOF
+          ## Summary
+          Automatic rebase of this fork onto \`seerr-team/seerr@develop\`.
+
+          Unit Tests and Lint must pass on this PR. Auto-merge is enabled; on merge,
+          the \`develop\` push publishes \`ghcr.io/xavierchevalier/seerr:develop\`.
+
+          Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+          )"
+
+          existing="$(gh pr list --base develop --head "${SYNC_BRANCH}" --state open \
+            --json number --jq '.[0].number // empty')"
+
+          if [[ -n "${existing}" ]]; then
+            gh pr edit "${existing}" --title "${SYNC_PR_TITLE}" --body "${body}"
+            pr="${existing}"
+            echo "Updated existing sync PR #${pr}"
+          else
+            url="$(gh pr create --base develop --head "${SYNC_BRANCH}" \
+              --title "${SYNC_PR_TITLE}" --body "${body}")"
+            pr="$(gh pr list --base develop --head "${SYNC_BRANCH}" --state open \
+              --json number --jq '.[0].number')"
+            echo "Created sync PR #${pr} (${url})"
+          fi
+
+          # Wait for PR checks (Unit Tests / Lint run on pull_request), then squash-merge.
+          # This is the reliable auto-merge path without depending on branch-protection
+          # required contexts. If GitHub auto-merge is enabled on the repo, prefer it.
+          if gh pr merge "${pr}" --auto --squash --delete-branch 2>/dev/null; then
+            echo "GitHub auto-merge enabled on #${pr} (will land when required checks pass)"
+          else
+            echo "Waiting for PR checks on #${pr}, then merging"
+            gh pr checks "${pr}" --watch --interval 30
+            gh pr merge "${pr}" --squash --delete-branch
+          fi
 
       - name: Open issue on rebase conflict
         if: failure() && steps.sync.outputs.status == 'conflict'
@@ -83,16 +122,19 @@ jobs:
             const body = [
               'Automatic rebase of this fork onto `seerr-team/seerr@develop` failed due to conflicts.',
               '',
-              'Resolve locally (no merge commit):',
+              'Resolve locally, then open (or refresh) the sync PR — do **not** force-push `develop`:',
               '```bash',
               'git fetch origin develop',
               'git checkout develop',
               'git pull --ff-only origin develop',
-              'git remote add upstream https://github.com/seerr-team/seerr.git',
+              'git remote add upstream https://github.com/seerr-team/seerr.git || true',
               'git fetch upstream develop',
+              'git checkout -B chore/sync-upstream',
               'git rebase upstream/develop',
               '# resolve conflicts, then:',
-              'git push --force-with-lease origin develop',
+              'git push --force-with-lease origin chore/sync-upstream',
+              'gh pr create --base develop --head chore/sync-upstream \\',
+              '  --title "chore(sync): upstream develop" || gh pr merge --auto --squash',
               '```',
               '',
               `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
