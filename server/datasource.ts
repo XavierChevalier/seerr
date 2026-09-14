@@ -8,6 +8,8 @@ import OverrideRule from '@server/entity/OverrideRule';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { Session } from '@server/entity/Session';
+import { SubscriptionGift } from '@server/entity/SubscriptionGift';
+import { SubscriptionPayment } from '@server/entity/SubscriptionPayment';
 import { User } from '@server/entity/User';
 import { UserPushSubscription } from '@server/entity/UserPushSubscription';
 import { UserSettings } from '@server/entity/UserSettings';
@@ -24,7 +26,7 @@ import { DataSource } from 'typeorm';
 
 const DB_SSL_PREFIX = 'DB_SSL_';
 
-const entities = [
+export const entities = [
   Blocklist,
   DiscoverSlider,
   Issue,
@@ -35,6 +37,8 @@ const entities = [
   Season,
   SeasonRequest,
   Session,
+  SubscriptionGift,
+  SubscriptionPayment,
   User,
   UserPushSubscription,
   UserSettings,
