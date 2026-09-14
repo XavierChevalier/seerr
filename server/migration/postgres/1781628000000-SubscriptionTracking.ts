@@ -34,12 +34,8 @@ export class SubscriptionTracking1781628000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP INDEX "IDX_a4783a9809ec251659127e3deb"`
-    );
-    await queryRunner.query(
-      `DROP INDEX "IDX_2a17e8d0eea74a5607de6aa549"`
-    );
+    await queryRunner.query(`DROP INDEX "IDX_a4783a9809ec251659127e3deb"`);
+    await queryRunner.query(`DROP INDEX "IDX_2a17e8d0eea74a5607de6aa549"`);
     await queryRunner.query(
       `ALTER TABLE "subscription_gift" DROP CONSTRAINT "FK_a4783a9809ec251659127e3deb9"`
     );

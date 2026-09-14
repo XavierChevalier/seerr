@@ -1,4 +1,10 @@
-import { Column, Entity, Index, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { User } from './User';
 
 @Entity()
@@ -15,7 +21,9 @@ export class SubscriptionGift {
   @Column({ type: 'varchar' })
   public reason: string;
 
-  @ManyToOne(() => User, (user) => user.subscriptionGifts, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, (user) => user.subscriptionGifts, {
+    onDelete: 'CASCADE',
+  })
   @Index()
   public user: User;
 }
